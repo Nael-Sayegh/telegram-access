@@ -1,0 +1,11 @@
+# Fins de ligne LF partout (Windows en local, macOS en CI).
+* text=auto eol=lf
+
+# Binaires
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.pdf binary
+*.p12 binary
+*.mobileprovision binary
+*.zip binary
