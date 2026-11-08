@@ -1,0 +1,14 @@
+// Réglages communs à toutes les configurations.
+// Les secrets (api_id / api_hash Telegram) proviennent de Secrets.xcconfig,
+// généré par la CI à partir des GitHub Secrets et ignoré par git.
+
+APP_DISPLAY_NAME = Accessigram
+PRODUCT_BUNDLE_IDENTIFIER = com.nael.telegramaccess
+MARKETING_VERSION = 0.1.0
+CURRENT_PROJECT_VERSION = 1
+
+// Valeurs vides par défaut : l'app affiche un message explicite si elles manquent.
+TG_API_ID =
+TG_API_HASH =
+
+#include? "Secrets.xcconfig"

@@ -1,0 +1,39 @@
+# Projet généré par XcodeGen (source de vérité : project.yml)
+*.xcodeproj
+*.xcworkspace
+!*.xcodeproj/project.xcworkspace
+
+# Build / dérivés
+build/
+DerivedData/
+SourcePackages/
+.build/
+*.ipa
+*.dSYM.zip
+*.xcresult
+
+# Signature : ne jamais versionner
+*.p12
+*.p8
+*.cer
+*.mobileprovision
+*.keychain-db
+
+# Secrets générés par la CI
+Config/Secrets.xcconfig
+
+# fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/
+fastlane/test_output/
+fastlane/README.md
+
+# Ruby
+vendor/bundle/
+.bundle/
+
+# Divers
+.DS_Store
+xcuserdata/
+*.swp

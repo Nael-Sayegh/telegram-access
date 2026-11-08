@@ -1,0 +1,76 @@
+name: Release TestFlight
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  testflight:
+    name: Archive signée et envoi TestFlight
+    runs-on: macos-26
+    environment: release
+    timeout-minutes: 60
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ruby/setup-ruby@b3aaceaef7e0ee231b499e7b5f49c03fc1d32199 # v1.338.0
+        with:
+          ruby-version: '3.4'
+          bundler-cache: true
+
+      - name: Générer le projet Xcode
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Cache des paquets Swift
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: SourcePackages
+          key: spm-${{ runner.os }}-${{ hashFiles('project.yml') }}
+          restore-keys: spm-${{ runner.os }}-
+
+      - name: Écrire Config/Secrets.xcconfig
+        env:
+          TG_API_ID: ${{ secrets.TG_API_ID }}
+          TG_API_HASH: ${{ secrets.TG_API_HASH }}
+        run: |
+          test -n "$TG_API_ID" && test -n "$TG_API_HASH" || { echo "::error::Secrets TG_API_ID / TG_API_HASH manquants"; exit 1; }
+          umask 077
+          printf 'TG_API_ID = %s\nTG_API_HASH = %s\n' "$TG_API_ID" "$TG_API_HASH" > Config/Secrets.xcconfig
+
+      - name: Build, signature et upload
+        run: bundle exec fastlane beta
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+
+      - name: Supprimer les secrets du disque
+        if: always()
+        run: rm -f Config/Secrets.xcconfig
+
+      - name: Artefacts (IPA + dSYM)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: testflight-${{ github.run_number }}
+          path: |
+            build/*.ipa
+            build/*.dSYM.zip
+          retention-days: 7
