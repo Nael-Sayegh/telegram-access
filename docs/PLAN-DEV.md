@@ -44,7 +44,9 @@ gh repo create telegram-access --private --source . --remote origin
 - Génération initiale via un workflow manuel `certs-init.yml` (`match appstore`) avec la clé API ASC.
 - Builds suivants en `readonly: true`.
 
-### 0.4 Secrets GitHub (environment `release`, approbation manuelle optionnelle)
+### 0.4 Secrets GitHub (environment `release`, limité à `main` et aux tags `v*`)
+Approbation manuelle (relecteur obligatoire) indisponible avec le forfait gratuit pour un dépôt privé. Procédure détaillée : [CONFIGURATION.md](CONFIGURATION.md).
+
 | Secret | Usage |
 |---|---|
 | `APPLE_TEAM_ID` | Identifiant d'équipe Apple Developer (signature) |
