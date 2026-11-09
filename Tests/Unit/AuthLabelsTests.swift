@@ -29,6 +29,39 @@ final class AuthLabelsTests: XCTestCase {
         XCTAssertEqual(AuthLabels.codeSent(info), "Vous allez recevoir un appel au plus 1 qui vous dictera un code.")
     }
 
+    func testUnknownOrZeroLengthIsOmitted() {
+        let info = CodeInfo(phoneNumber: "+3361", delivery: .sms, codeLength: 0, nextDelivery: nil, resendTimeout: 0)
+        XCTAssertEqual(AuthLabels.codeSent(info), "Un code a été envoyé par SMS au plus 3 3 6 1.")
+    }
+
+    func testEmailCodeSent() {
+        XCTAssertEqual(
+            AuthLabels.emailCodeSent(pattern: "a***@exemple.fr", length: 6),
+            "Un code de 6 chiffres a été envoyé à a***@exemple.fr."
+        )
+        XCTAssertEqual(
+            AuthLabels.emailCodeSent(pattern: "a***@exemple.fr", length: nil),
+            "Un code a été envoyé à a***@exemple.fr."
+        )
+        XCTAssertEqual(
+            AuthLabels.emailCodeSent(pattern: "a***@exemple.fr", length: 0),
+            "Un code a été envoyé à a***@exemple.fr."
+        )
+    }
+
+    func testRecoveryCodeSent() {
+        XCTAssertEqual(AuthLabels.recoveryCodeSent(pattern: "b***@exemple.fr"), "Un code de récupération a été envoyé à b***@exemple.fr.")
+        XCTAssertEqual(
+            AuthLabels.recoveryCodeSent(pattern: ""),
+            "Un code de récupération a été envoyé à votre adresse e-mail de récupération."
+        )
+    }
+
+    func testMinimumAge() {
+        XCTAssertEqual(AuthLabels.minimumAge(16), "Vous devez avoir au moins 16 ans pour utiliser Telegram.")
+        XCTAssertNil(AuthLabels.minimumAge(0))
+    }
+
     func testResendButton() {
         XCTAssertEqual(AuthLabels.resendButton(.sms), "Recevoir le code par SMS")
         XCTAssertEqual(AuthLabels.resendButton(.call), "Recevoir le code par appel")

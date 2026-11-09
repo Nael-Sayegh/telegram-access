@@ -26,6 +26,24 @@ struct CodeInfo: Equatable {
     var resendTimeout: Int
 }
 
+/// Étape « mot de passe » de la validation en deux étapes.
+struct PasswordInfo: Equatable {
+    var hint: String
+    /// Vrai si une adresse e-mail de récupération est configurée (« Mot de passe oublié » possible).
+    var hasRecoveryEmail: Bool
+    /// Adresse masquée où le code de récupération a été envoyé ; vide tant qu'aucun code n'a été demandé.
+    var recoveryEmailPattern: String
+}
+
+/// Conditions d'utilisation de Telegram, à présenter avant la création d'un compte.
+struct RegistrationTerms: Equatable {
+    var text: String
+    /// Âge minimum pour accepter les conditions ; 0 si aucune restriction.
+    var minimumAge: Int
+    /// Vrai si Telegram exige une acceptation explicite (fenêtre bloquante).
+    var requiresExplicitAcceptance: Bool
+}
+
 /// Étape courante de la connexion, telle que présentée à l'interface.
 enum AuthStep: Equatable {
     case starting
@@ -34,14 +52,31 @@ enum AuthStep: Equatable {
     case phoneNumber
     case code(CodeInfo)
     case emailAddress
-    case emailCode(pattern: String, length: Int)
-    case password(hint: String, hasRecoveryEmail: Bool)
-    case registration
+    /// `length` vaut `nil` si la longueur du code est inconnue.
+    case emailCode(pattern: String, length: Int?)
+    case password(PasswordInfo)
+    case registration(RegistrationTerms)
     /// Étape TDLib non prise en charge (QR code, achat Premium…).
     case unsupported(String)
     case ready
     case loggingOut
     case closed
+}
+
+/// Élément d'un écran de connexion auquel se rapporte une erreur : il reçoit le focus
+/// et l'erreur est ajoutée à son libellé VoiceOver.
+enum AuthField: Equatable {
+    case country
+    case phoneNumber
+    case code
+    case emailAddress
+    case emailCode
+    case password
+    case recoveryCode
+    case newPassword
+    case passwordHint
+    case firstName
+    case lastName
 }
 
 /// Erreur renvoyée par Telegram, sans dépendance à TDLibKit.

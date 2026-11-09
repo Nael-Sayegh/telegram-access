@@ -34,4 +34,21 @@ final class AuthErrorTextTests: XCTestCase {
         XCTAssertEqual(AuthErrorText.retryDelay(in: "FLOOD_WAIT_120"), 120)
         XCTAssertNil(AuthErrorText.retryDelay(in: "PHONE_NUMBER_FLOOD"))
     }
+
+    func testPasswordRecoveryErrors() {
+        XCTAssertEqual(
+            AuthErrorText.message(code: 400, text: "PASSWORD_RECOVERY_NA"),
+            "Aucune adresse e-mail de récupération n'est configurée pour ce compte."
+        )
+        XCTAssertEqual(
+            AuthErrorText.message(code: 400, text: "PASSWORD_RECOVERY_EXPIRED"),
+            "Le code de récupération a expiré. Demandez-en un nouveau."
+        )
+    }
+
+    func testErrorFieldForNames() {
+        XCTAssertEqual(AuthErrorText.field(for: TelegramError(code: 400, message: "LASTNAME_INVALID")), .lastName)
+        XCTAssertEqual(AuthErrorText.field(for: TelegramError(code: 400, message: "FIRSTNAME_INVALID")), .firstName)
+        XCTAssertNil(AuthErrorText.field(for: TelegramError(code: 400, message: "PHONE_CODE_INVALID")))
+    }
 }

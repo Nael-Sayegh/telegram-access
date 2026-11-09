@@ -16,24 +16,28 @@ struct PhoneNumberView: View {
                             .foregroundStyle(.primary)
                         Spacer()
                         Text(countryDisplay)
-                            .foregroundStyle(.secondary)
+                            .readableSecondary()
                             .multilineTextAlignment(.trailing)
                     }
                 }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Pays")
+                // Libellé posé sur le bouton lui-même (pas de `.accessibilityElement`, qui
+                // créerait un doublon) : il remplace le texte combiné du contenu.
                 .accessibilityValue(countryValue)
                 .accessibilityHint("Ouvre la liste des pays, avec recherche.")
-                .accessibilityAddTraits(.isButton)
+                .authField(.country, label: "Pays", auth: auth, isTextInput: false)
 
-                TextField("Numéro de téléphone", text: $number)
+                // Texte indicatif court : un texte long est tronqué aux grandes tailles de police.
+                // Le libellé VoiceOver complet est posé par `authField`.
+                TextField("Numéro", text: $number)
                     .keyboardType(.phonePad)
                     .textContentType(.telephoneNumber)
-                    .authField(label: "Numéro de téléphone", error: auth.errorMessage, errorCount: auth.errorCount)
+                    .authField(.phoneNumber, label: "Numéro de téléphone", auth: auth)
             } header: {
                 Text("Votre numéro de téléphone")
+                    .readableSecondary()
             } footer: {
                 Text("Sans l'indicatif du pays, ou au format international en commençant par plus.")
+                    .readableSecondary()
             }
 
             ErrorSection(message: auth.errorMessage)
@@ -122,14 +126,13 @@ struct CountryPickerView: View {
                 Text(country.flag)
                 Text(country.name)
                 Spacer()
-                Text("+\(country.callingCode)")
-                    .foregroundStyle(.secondary)
+                Text(verbatim: "+" + country.callingCode)
+                    .readableSecondary()
             }
             .foregroundStyle(.primary)
         }
-        .accessibilityElement(children: .ignore)
         .accessibilityLabel(AuthLabels.country(name: country.name, callingCode: country.callingCode))
-        .accessibilityAddTraits(selection == country ? [.isButton, .isSelected] : [.isButton])
+        .accessibilityAddTraits(selection == country ? .isSelected : [])
     }
 
     private var filteredCountries: [Country] {

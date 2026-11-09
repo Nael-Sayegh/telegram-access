@@ -4,12 +4,6 @@ import Security
 /// Clé de chiffrement de la base TDLib (32 octets aléatoires) conservée dans le trousseau,
 /// accessible uniquement appareil déverrouillé et jamais synchronisée ni restaurée ailleurs.
 enum DatabaseKeyStore {
-    struct Key {
-        let data: Data
-        /// Vrai si la clé vient d'être créée (aucune base existante ne peut être lue avec).
-        let isNew: Bool
-    }
-
     enum KeyStoreError: Error {
         case randomGenerationFailed(OSStatus)
         case keychain(OSStatus)
@@ -19,24 +13,10 @@ enum DatabaseKeyStore {
     private static let account = "database-encryption-key"
     private static let keyLength = 32
 
-    static func loadOrCreateKey() throws -> Key {
-        if let existing = try load() {
-            return Key(data: existing, isNew: false)
-        }
-        let key = try randomKey()
-        try save(key)
-        return Key(data: key, isNew: true)
-    }
-
-    private static var baseQuery: [String: Any] {
-        [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-        ]
-    }
-
-    private static func load() throws -> Data? {
+    /// Clé enregistrée, ou `nil` si elle est absente ou invalide.
+    /// Lève une erreur si le trousseau est inaccessible (appareil verrouillé…) : l'appelant
+    /// ne doit surtout pas en conclure que la clé n'existe pas.
+    static func loadKey() throws -> Data? {
         var query = baseQuery
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -54,19 +34,45 @@ enum DatabaseKeyStore {
         }
     }
 
+    /// Crée une clé aléatoire et remplace l'éventuelle clé existante.
+    static func createKey() throws -> Data {
+        let key = try randomKey()
+        try save(key)
+        return key
+    }
+
+    /// Supprime la clé (après une déconnexion). Sans effet si elle est absente.
+    static func deleteKey() throws {
+        let status = SecItemDelete(baseQuery as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw KeyStoreError.keychain(status)
+        }
+    }
+
+    private static var baseQuery: [String: Any] {
+        [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+        ]
+    }
+
     private static func save(_ key: Data) throws {
-        SecItemDelete(baseQuery as CFDictionary)
+        try deleteKey()
         var attributes = baseQuery
         attributes[kSecValueData as String] = key
         attributes[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        attributes[kSecAttrSynchronizable as String] = false
         let status = SecItemAdd(attributes as CFDictionary, nil)
         guard status == errSecSuccess else { throw KeyStoreError.keychain(status) }
     }
 
     private static func randomKey() throws -> Data {
-        var bytes = [UInt8](repeating: 0, count: keyLength)
-        let status = SecRandomCopyBytes(kSecRandomDefault, keyLength, &bytes)
+        var key = Data(count: keyLength)
+        let status = key.withUnsafeMutableBytes { buffer in
+            SecRandomCopyBytes(kSecRandomDefault, keyLength, buffer.baseAddress!)
+        }
         guard status == errSecSuccess else { throw KeyStoreError.randomGenerationFailed(status) }
-        return Data(bytes)
+        return key
     }
 }

@@ -14,7 +14,7 @@ struct CodeView: View {
                     .textContentType(.oneTimeCode)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
-                    .authField(label: "Code de connexion", error: auth.errorMessage, errorCount: auth.errorCount)
+                    .authField(.code, label: "Code de connexion", auth: auth)
             }
 
             ErrorSection(message: auth.errorMessage)
@@ -34,6 +34,7 @@ struct CodeView: View {
             } footer: {
                 if info.nextDelivery != nil {
                     Text(AuthLabels.resendAvailability(after: info.resendTimeout))
+                        .readableSecondary()
                 }
             }
         }

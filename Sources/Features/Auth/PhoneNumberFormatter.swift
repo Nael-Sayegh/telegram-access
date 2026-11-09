@@ -8,19 +8,33 @@ enum PhoneNumberFormatter {
     /// Une saisie commençant par « + » ou « 00 » est considérée comme déjà internationale.
     static func international(callingCode: String, input: String) -> String {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        let digits = trimmed.filter(\.isNumber)
+        let allDigits = Self.digits(in: trimmed)
 
-        if trimmed.hasPrefix("+") {
-            return "+" + digits
+        if trimmed.hasPrefix("+") || trimmed.hasPrefix("＋") {
+            return "+" + allDigits
         }
-        if digits.hasPrefix("00") {
-            return "+" + String(digits.dropFirst(2))
+        if allDigits.hasPrefix("00") {
+            return "+" + String(allDigits.dropFirst(2))
         }
 
-        var national = Substring(digits)
+        var national = Substring(allDigits)
         if !keepsLeadingZero.contains(callingCode) {
             while national.hasPrefix("0") { national = national.dropFirst() }
         }
         return "+" + callingCode + String(national)
+    }
+
+    /// Chiffres décimaux de la saisie, convertis en chiffres ASCII (0 à 9).
+    /// Les chiffres d'autres écritures (arabe, persan, pleine chasse…) sont convertis ;
+    /// « ½ », « ² » ou les chiffres romains sont ignorés.
+    static func digits(in text: String) -> String {
+        var result = ""
+        for scalar in text.unicodeScalars {
+            guard scalar.properties.numericType == .decimal,
+                  let value = scalar.properties.numericValue
+            else { continue }
+            result += String(Int(value))
+        }
+        return result
     }
 }

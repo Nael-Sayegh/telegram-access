@@ -4,12 +4,38 @@ import Foundation
 enum TDLibRuntime {
     /// Un seul gestionnaire par processus : `td_receive` n'est appelable que depuis un thread.
     static let manager = TDLibClientManager()
+
+    /// Les journaux TDLib peuvent contenir messages et numéros de téléphone.
+    /// - Release : aucun journal (flux vide, niveau 0).
+    /// - Debug : erreurs seulement, sur la sortie d'erreur (console Xcode, non conservée).
+    ///
+    /// `td_execute` est global au processus. Appelé juste après la création du client, avant
+    /// tout envoi de paramètres, de numéro ou de code.
+    static func configureLogging(using client: TDLibClient) {
+        #if DEBUG
+        let verbosityApplied = isOk(try? client.execute(
+            query: DTO(SetLogVerbosityLevel(newVerbosityLevel: 1), encoder: client.encoder)
+        ))
+        assert(verbosityApplied, "Niveau de journalisation TDLib refusé")
+        #else
+        _ = try? client.execute(
+            query: DTO(SetLogVerbosityLevel(newVerbosityLevel: 0), encoder: client.encoder)
+        )
+        _ = try? client.execute(
+            query: DTO(SetLogStream(logStream: .logStreamEmpty), encoder: client.encoder)
+        )
+        #endif
+    }
+
+    private static func isOk(_ result: [String: Any]?) -> Bool {
+        (result?["@type"] as? String) == "ok"
+    }
 }
 
 /// Enveloppe d'un client TDLib. Seul point de l'app qui importe TDLibKit pour l'authentification.
 /// Un client fermé (`authorizationStateClosed`, après déconnexion) ne peut pas être réutilisé :
 /// il faut en créer un nouveau.
-actor TelegramClient {
+actor TelegramClient: AuthService {
     /// Étapes d'authentification, dans l'ordre reçu de TDLib.
     nonisolated let steps: AsyncStream<AuthStep>
 
@@ -18,6 +44,13 @@ actor TelegramClient {
     private let client: TDLibClient
     private let config: AppConfig
     private var pumpTask: Task<Void, Never>?
+
+    /// Vrai tant que TDLib attend ses paramètres (première initialisation ou nouvel essai).
+    private var awaitsParameters = false
+    private var isInitializing = false
+    /// Vrai après `authorizationStateLoggingOut` : la fermeture qui suit est une déconnexion
+    /// (locale ou session révoquée à distance), et non une simple fermeture du client.
+    private var isLoggingOut = false
 
     init(config: AppConfig, manager: TDLibClientManager = TDLibRuntime.manager) {
         self.config = config
@@ -39,7 +72,7 @@ actor TelegramClient {
                 }
             }
         }
-        Self.configureLogging(self.client)
+        TDLibRuntime.configureLogging(using: self.client)
     }
 
     /// Démarre le traitement des états d'authentification. Idempotent.
@@ -51,6 +84,11 @@ actor TelegramClient {
             }
             stepContinuation.finish()
         }
+    }
+
+    func retryInitialization() async {
+        guard awaitsParameters, !isInitializing else { return }
+        await initialize()
     }
 
     // MARK: - Authentification
@@ -83,6 +121,16 @@ actor TelegramClient {
         _ = try await run { try await $0.checkAuthenticationPassword(password: password) }
     }
 
+    func requestPasswordRecovery() async throws {
+        _ = try await run { try await $0.requestAuthenticationPasswordRecovery() }
+    }
+
+    func recoverPassword(code: String, newPassword: String, newHint: String) async throws {
+        _ = try await run {
+            try await $0.recoverAuthenticationPassword(newHint: newHint, newPassword: newPassword, recoveryCode: code)
+        }
+    }
+
     func register(firstName: String, lastName: String) async throws {
         _ = try await run {
             try await $0.registerUser(disableNotification: false, firstName: firstName, lastName: lastName)
@@ -103,7 +151,6 @@ actor TelegramClient {
             .sorted { $0.name.compare($1.name, locale: Locale.current) == .orderedAscending }
     }
 
-    /// Pays estimé par Telegram à partir de l'adresse IP (code ISO).
     func estimatedCountryCode() async throws -> String {
         try await run { try await $0.getCountryCode() }.text
     }
@@ -111,25 +158,38 @@ actor TelegramClient {
     // MARK: - Privé
 
     private func handle(_ state: AuthorizationState) async {
-        guard case .authorizationStateWaitTdlibParameters = state else {
+        switch state {
+        case .authorizationStateWaitTdlibParameters:
+            awaitsParameters = true
+            await initialize()
+        case .authorizationStateLoggingOut:
+            isLoggingOut = true
             stepContinuation.yield(AuthStep(state))
-            return
+        case .authorizationStateClosed:
+            if isLoggingOut {
+                Self.eraseLocalData()
+            }
+            stepContinuation.yield(.closed)
+        default:
+            awaitsParameters = false
+            stepContinuation.yield(AuthStep(state))
         }
+    }
+
+    private func initialize() async {
+        isInitializing = true
+        defer { isInitializing = false }
         stepContinuation.yield(.starting)
         do {
             try await sendParameters()
+            awaitsParameters = false
         } catch {
             stepContinuation.yield(.failed("Impossible d'initialiser la base locale chiffrée."))
         }
     }
 
     private func sendParameters() async throws {
-        let key = try DatabaseKeyStore.loadOrCreateKey()
-        if key.isNew {
-            // Sans la clé (nouvel appareil, trousseau effacé), une base existante est illisible :
-            // on repart d'un dossier vide plutôt que d'échouer.
-            try TDLibStorage.reset()
-        }
+        let key = try Self.databaseKey()
         let directory = try TDLibStorage.prepareDirectory()
         let version = ProcessInfo.processInfo.operatingSystemVersion
 
@@ -138,7 +198,7 @@ actor TelegramClient {
             apiId: config.apiId,
             applicationVersion: config.applicationVersion,
             databaseDirectory: directory.appendingPathComponent("db", isDirectory: true).path,
-            databaseEncryptionKey: key.data,
+            databaseEncryptionKey: key,
             deviceModel: "iPhone",
             filesDirectory: directory.appendingPathComponent("files", isDirectory: true).path,
             systemLanguageCode: Locale.preferredLanguages.first ?? "fr",
@@ -151,21 +211,31 @@ actor TelegramClient {
         )
     }
 
+    /// Clé de chiffrement de la base. Sans clé (premier lancement, nouvel appareil, trousseau
+    /// effacé), une base existante est illisible : le dossier est vidé *avant* de créer la clé,
+    /// pour ne jamais associer une clé neuve à une ancienne base si l'effacement échoue.
+    /// Un trousseau verrouillé lève une erreur et n'efface rien.
+    private static func databaseKey() throws -> Data {
+        if let existing = try DatabaseKeyStore.loadKey() {
+            return existing
+        }
+        try TDLibStorage.reset()
+        return try DatabaseKeyStore.createKey()
+    }
+
+    /// Après une déconnexion, TDLib a détruit sa base. On supprime aussi le dossier et la clé :
+    /// la session suivante repart d'une clé neuve. Au mieux : un échec ici est rattrapé au
+    /// lancement suivant (clé absente → dossier vidé ; dossier vide → nouvelle base).
+    private static func eraseLocalData() {
+        try? TDLibStorage.reset()
+        try? DatabaseKeyStore.deleteKey()
+    }
+
     private func run<T>(_ body: (TDLibClient) async throws -> T) async throws -> T {
         do {
             return try await body(client)
         } catch let error as TDLibKit.Error {
             throw TelegramError(code: error.code, message: error.message)
         }
-    }
-
-    /// Les journaux TDLib peuvent contenir messages et numéros : on les réduit au strict minimum.
-    private static func configureLogging(_ client: TDLibClient) {
-        #if DEBUG
-        let level = 1 // erreurs uniquement
-        #else
-        let level = 0 // erreurs fatales uniquement
-        #endif
-        _ = try? client.execute(query: DTO(SetLogVerbosityLevel(newVerbosityLevel: level), encoder: client.encoder))
     }
 }
