@@ -30,17 +30,24 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Générer le projet Xcode
+      # Version et empreinte SHA-256 épinglées : le projet généré est compilé avec la clé
+      # App Store Connect sur le disque, l'outil qui le produit doit être figé.
+      - name: Installer XcodeGen
+        env:
+          XCODEGEN_VERSION: 2.46.0
+          XCODEGEN_SHA256: 4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806
         run: |
-          brew install xcodegen
-          xcodegen generate
+          set -euo pipefail
+          curl -fsSL -o "$RUNNER_TEMP/xcodegen.zip" \
+            "https://github.com/yonaskolb/XcodeGen/releases/download/${XCODEGEN_VERSION}/xcodegen.zip"
+          echo "${XCODEGEN_SHA256}  $RUNNER_TEMP/xcodegen.zip" | shasum -a 256 -c -
+          unzip -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP"
 
-      - name: Cache des paquets Swift
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: SourcePackages
-          key: spm-${{ runner.os }}-${{ hashFiles('project.yml') }}
-          restore-keys: spm-${{ runner.os }}-
+      - name: Générer le projet Xcode
+        run: '"$RUNNER_TEMP/xcodegen/bin/xcodegen" generate'
+
+      # Pas de cache SPM ici : les paquets sont résolus et vérifiés (sommes de contrôle) à neuf
+      # pour chaque build signé, plutôt que restaurés d'un cache partagé avec la CI.
 
       - name: Écrire les secrets sur le disque
         env:

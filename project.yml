@@ -17,7 +17,8 @@ configFiles:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    SWIFT_STRICT_CONCURRENCY: minimal
+    # Vérification complète des accès concurrents (avertissements en mode Swift 5).
+    SWIFT_STRICT_CONCURRENCY: complete
     IPHONEOS_DEPLOYMENT_TARGET: "17.0"
     ENABLE_USER_SCRIPT_SANDBOXING: YES
     DEAD_CODE_STRIPPING: YES
@@ -44,7 +45,7 @@ targets:
         # de XcodeGen y impose "1,2", ce qui écraserait un réglage projet.
         TARGETED_DEVICE_FAMILY: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        # Signature réglée par fastlane (match) au moment de l'archive.
+        # Signature automatique gérée par Apple, réglée par release.yml au moment de l'archive.
         SUPPORTS_MACCATALYST: NO
         SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: NO
         SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"

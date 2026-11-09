@@ -11,6 +11,7 @@ certificat de distribution et le profil à chaque build, puis l'export envoie le
 État du dépôt `Nael-Sayegh/telegram-access` :
 - Environnement `release` **créé**, limité à la branche `main` et aux tags `v*`. Les secrets y sont rangés.
 - Relecteur obligatoire **indisponible** avec le forfait actuel (réservé aux forfaits payants pour les dépôts privés) : un tag `v*` déclenche donc l'envoi sans validation.
+- Protection de branche, règles sur les tags et secret scanning également **indisponibles** (forfait gratuit, dépôt privé). Ne jamais ajouter de collaborateur ayant les droits d'écriture : il pourrait déclencher une release signée.
 
 ---
 

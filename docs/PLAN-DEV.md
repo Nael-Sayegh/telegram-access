@@ -34,8 +34,8 @@ Telegram : obtenir `api_id` / `api_hash` sur https://my.telegram.org, respecter 
 ```bash
 gh repo create telegram-access --private --source . --remote origin
 ```
-- Protection de `main` : PR obligatoire + CI verte.
-- Dependabot (GitHub Actions), secret scanning + push protection.
+- Dependabot (GitHub Actions).
+- Protection de `main`, règles sur les tags et secret scanning : **indisponibles** pour un dépôt privé avec le forfait gratuit (vérifié le 2026-11-09), et GitHub Pro n'est pas retenu. Conséquences acceptées : push direct sur `main`, et tout tag `v*` déclenche la release sans relecture. Compensations : 2FA sur le compte GitHub, aucun collaborateur, secrets uniquement dans l'environnement `release`.
 - `.gitignore` : `*.xcodeproj`, `build/`, `*.p12`, `*.mobileprovision`, `Config/Secrets.xcconfig`.
 - Secrets injectés à la compilation via un `.xcconfig` généré par la CI.
 
@@ -55,9 +55,11 @@ Approbation manuelle (relecteur obligatoire) indisponible avec le forfait gratui
 Les builds de PR n'ont pas accès aux secrets de signature.
 
 ### 0.5 Workflows
-**`ci.yml`** (push + PR) : `xcodegen generate` → `xcodebuild test` sur simulateur sans signature → tests unitaires, + tests UI (dont `performAccessibilityAudit()`) sur les PR → cache SPM / TDLib.
+XcodeGen est téléchargé dans une version figée et vérifié par empreinte SHA-256 (pas de `brew install`).
 
-**`release.yml`** (tag `v*` ou manuel) : `xcodegen generate` → `Secrets.xcconfig` + clé `.p8` écrits dans le runner → `xcodebuild archive` (signature automatique, build number = `github.run_number`) → `xcodebuild -exportArchive` (envoi TestFlight) → suppression des secrets → artefact dSYM (rétention courte).
+**`ci.yml`** (push, PR, manuel) : `xcodegen generate` → `xcodebuild test` sur simulateur sans signature → tests unitaires ; tests UI (`performAccessibilityAudit()` sur chaque écran de connexion, affiché par un service factice) sur les PR et les lancements manuels → cache SPM / TDLib.
+
+**`release.yml`** (tag `v*` ou manuel) : `xcodegen generate` → `Secrets.xcconfig` + clé `.p8` écrits dans le runner → `xcodebuild archive` (signature automatique, build number = `github.run_number`, paquets résolus à neuf, sans cache) → `xcodebuild -exportArchive` (envoi TestFlight) → suppression des secrets → artefact dSYM (rétention courte).
 
 ### 0.6 Coût en minutes
 - Dépôt privé : **1 min macOS = 10 min décomptées** → forfait gratuit ≈ 200 min macOS/mois (10–15 builds).
@@ -79,13 +81,13 @@ Les builds de PR n'ont pas accès aux secrets de signature.
    - `WaitPhoneNumber` → champ téléphone + sélecteur de pays
    - `WaitCode` → code (app Telegram / SMS / appel)
    - `WaitEmailAddress` / `WaitEmailCode` (parfois imposé)
-   - `WaitPassword` → 2FA avec indice
-   - `WaitRegistration` → prénom / nom
+   - `WaitPassword` → 2FA avec indice ; « Mot de passe oublié » (code envoyé à l'e-mail de récupération, nouveau mot de passe obligatoire)
+   - `WaitRegistration` → prénom / nom + conditions d'utilisation de Telegram (fenêtre bloquante si Telegram l'exige, âge minimum)
    - `Ready`
 3. Accessibilité des écrans :
    - Pays avec recherche, annoncé « France, plus 33 ».
    - `textContentType = .telephoneNumber` et `.oneTimeCode`.
-   - Erreurs annoncées (`AccessibilityNotification.Announcement`) + focus sur le champ fautif.
+   - Erreur ajoutée au libellé du champ fautif + focus VoiceOver sur ce champ (annonce `AccessibilityNotification.Announcement` si le focus y est déjà).
    - Délai de renvoi annoncé une fois en texte, pas de décompte bavard.
    - Bouton « Recevoir le code par SMS / appel » toujours atteignable.
 4. Déconnexion / logout.
@@ -133,7 +135,9 @@ Les builds de PR n'ont pas accès aux secrets de signature.
 **Données sur l'appareil**
 - Clé de base TDLib aléatoire (32 octets) dans le **Keychain**, `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`.
 - Dossier TDLib en `FileProtectionType.completeUnlessOpen` + `isExcludedFromBackup`. (`complete` écarté : la base SQLite ouverte par TDLib deviendrait inaccessible au verrouillage, avec risque de corruption ; la base est déjà chiffrée par TDLib.)
-- Clé absente du trousseau (nouvel appareil, trousseau effacé) : le dossier TDLib est vidé avant initialisation, la session est perdue (reconnexion).
+- Clé absente du trousseau (nouvel appareil, trousseau effacé) : le dossier TDLib est vidé **avant** la création d'une nouvelle clé, la session est perdue (reconnexion). Trousseau verrouillé : erreur, rien n'est effacé.
+- Déconnexion (locale ou session révoquée à distance) : dossier TDLib effacé et clé supprimée ; la session suivante utilise une clé neuve.
+- Journaux TDLib : aucun en Release (`logStreamEmpty`), erreurs seules en Debug.
 - Verrouillage optionnel Face ID / Touch ID / code (`LocalAuthentication`).
 - Écran de confidentialité dans le sélecteur d'apps.
 - Aucun log contenant messages ou numéros, même en debug.
@@ -214,14 +218,15 @@ telegram-access/                  # dépôt GitHub privé
 **Fait (2026-11-08)**
 - Phase 0 : arborescence, `project.yml` (TDLibKit épinglé au commit du tag `1.5.2-tdlib-1.8.69-fb464979`), `Config/*.xcconfig`, workflows `ci.yml` et `release.yml` (actions épinglées par SHA), environnement `release`, Dependabot (actions ; TDLibKit à mettre à jour à la main), icône provisoire.
 - 2026-11-09 : fastlane match remplacé par la signature gérée par Apple (comme Accessplayer) — plus de dépôt de certificats ni de fastlane.
-- Phase 1 (première version, **non compilée** faute de Mac — la CI fera foi) : `actor TelegramClient`, machine à états (`AuthStep`), écrans téléphone + sélecteur de pays (liste TDLib `getCountries`), code, e-mail, code e-mail, mot de passe 2FA, inscription, déconnexion ; clé de base dans le trousseau ; libellés VoiceOver et messages d'erreur testés unitairement ; audit d'accessibilité en test UI.
+- Phase 1 : `actor TelegramClient` (derrière le protocole `AuthService`), machine à états (`AuthStep`), écrans téléphone + sélecteur de pays (liste TDLib `getCountries`), code, e-mail, code e-mail, mot de passe 2FA, inscription, déconnexion ; clé de base dans le trousseau. CI verte et build `v0.1.1` envoyé sur TestFlight le 2026-11-09.
+- 2026-11-09, revue de la phase 1 : conditions d'utilisation affichées à l'inscription, « Mot de passe oublié », longueur de code inconnue (0) gérée, erreur rattachée au champ fautif (pays, nom…) avec annonce si le focus y est déjà, « Déconnexion… » pendant la déconnexion, « Réessayer » sans recréer de client TDLib, clé créée après l'effacement du dossier, effacement du dossier et de la clé à la déconnexion, journaux TDLib coupés en Release, chiffres saisis normalisés en ASCII, `SWIFT_STRICT_CONCURRENCY: complete`, XcodeGen épinglé, release sans cache ; tests unitaires de `AuthViewModel` (service factice) et audits UI de chaque écran.
 
 **Reste à faire côté compte (manuel)**
-- Apple Developer : bundle id `com.nael.telegramaccess`, fiche App Store Connect, clé API ASC.
-- Renseigner les secrets de l'environnement `release` (cf. [CONFIGURATION.md](CONFIGURATION.md)), puis taguer `v0.1.0`.
+- Aucun pour l'instant (secrets `release` en place, envoi TestFlight fonctionnel).
 
 **Décisions en attente**
 - Nom affiché définitif (provisoire : « Accessigram », dans `Config/Base.xcconfig`) — doit respecter les conditions de Telegram.
 - `ITSAppUsesNonExemptEncryption` (déclaration export du chiffrement) à trancher avant TestFlight externe.
+- Push chiffrées (phase 6) : l'extension de notification doit lire la base TDLib appareil verrouillé, ce qui est incompatible avec `completeUnlessOpen` et la clé `WhenUnlockedThisDeviceOnly` → choisir avant la phase 6 (ex. `completeUntilFirstUserAuthentication` + `AfterFirstUnlockThisDeviceOnly` en App Group, avec migration de la clé).
 
-**Prochaine étape** : faire passer la CI au vert, premier build TestFlight, test VoiceOver sur iPhone, puis phase 2 (liste des conversations).
+**Prochaine étape** : lancer la CI manuellement (audits UI), test VoiceOver sur iPhone via TestFlight (annonce des erreurs, conditions d'utilisation, récupération du mot de passe), puis phase 2 (liste des conversations).

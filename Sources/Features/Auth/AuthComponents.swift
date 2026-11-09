@@ -1,34 +1,53 @@
 import SwiftUI
 
 extension View {
-    /// Champ de saisie d'un écran de connexion : en cas d'erreur, le focus VoiceOver revient
-    /// sur le champ et l'erreur fait partie de son libellé (lue même si les indices sont désactivés).
-    func authField(label: String, error: String?, errorCount: Int) -> some View {
-        modifier(AuthFieldModifier(label: label, error: error, errorCount: errorCount))
+    /// Élément d'un écran de connexion (champ de saisie, bouton Pays…).
+    ///
+    /// Quand une erreur concerne cet élément :
+    /// - l'erreur est ajoutée à son libellé (relue à chaque passage, même indices désactivés) ;
+    /// - le focus VoiceOver y est placé, ce qui lit le libellé avec l'erreur ;
+    /// - si le focus y est déjà, VoiceOver ne relirait pas le libellé modifié : l'erreur est
+    ///   alors annoncée ;
+    /// - pour un champ de saisie, le clavier y est aussi replacé.
+    func authField(_ field: AuthField, label: String, auth: AuthViewModel, isTextInput: Bool = true) -> some View {
+        modifier(AuthFieldModifier(field: field, label: label, auth: auth, isTextInput: isTextInput))
     }
 }
 
 private struct AuthFieldModifier: ViewModifier {
+    let field: AuthField
     let label: String
-    let error: String?
-    let errorCount: Int
+    let auth: AuthViewModel
+    let isTextInput: Bool
 
     @AccessibilityFocusState private var isVoiceOverFocused: Bool
     @FocusState private var isKeyboardFocused: Bool
+
+    private var error: String? {
+        auth.errorField == field ? auth.errorMessage : nil
+    }
 
     func body(content: Content) -> some View {
         content
             .focused($isKeyboardFocused)
             .accessibilityFocused($isVoiceOverFocused)
             .accessibilityLabel(error.map { "\(label). Erreur : \($0)" } ?? label)
-            .onChange(of: errorCount) {
-                isKeyboardFocused = true
-                isVoiceOverFocused = true
+            .onChange(of: auth.errorCount) {
+                guard let error else { return }
+                if isTextInput {
+                    isKeyboardFocused = true
+                }
+                if isVoiceOverFocused {
+                    Announcer.announce(error)
+                } else {
+                    isVoiceOverFocused = true
+                }
             }
     }
 }
 
-/// Erreur visible à l'écran. Masquée pour VoiceOver : elle est déjà dans le libellé du champ.
+/// Erreur visible à l'écran. Masquée pour VoiceOver : elle est déjà dans le libellé de l'élément
+/// concerné, qui reçoit le focus.
 struct ErrorSection: View {
     let message: String?
 

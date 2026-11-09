@@ -22,4 +22,14 @@ final class PhoneNumberFormatterTests: XCTestCase {
     func testSeparatorsAreIgnored() {
         XCTAssertEqual(PhoneNumberFormatter.international(callingCode: "1", input: "(555) 010-9999"), "+15550109999")
     }
+
+    func testDigitsFromOtherScriptsAreConverted() {
+        // Chiffres arabes orientaux, pleine chasse.
+        XCTAssertEqual(PhoneNumberFormatter.international(callingCode: "33", input: "٠٦١٢٣٤٥٦٧٨"), "+33612345678")
+        XCTAssertEqual(PhoneNumberFormatter.digits(in: "０６１２"), "0612")
+    }
+
+    func testNonDecimalNumbersAreIgnored() {
+        XCTAssertEqual(PhoneNumberFormatter.digits(in: "½²Ⅻ 12"), "12")
+    }
 }

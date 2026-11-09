@@ -23,17 +23,30 @@ jobs:
     timeout-minutes: 45
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
-      # Tests UI (audits d'accessibilité) uniquement sur les PR, pour économiser les minutes macOS.
-      SCHEME: ${{ github.event_name == 'pull_request' && 'TelegramAccess' || 'TelegramAccessUnit' }}
+      # Tests UI (audits d'accessibilité) sur les PR et les lancements manuels
+      # (onglet Actions → CI → Run workflow) ; tests unitaires seuls sur les push,
+      # pour économiser les minutes macOS.
+      SCHEME: ${{ github.event_name == 'push' && 'TelegramAccessUnit' || 'TelegramAccess' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Générer le projet Xcode
+      # Version et empreinte SHA-256 épinglées (pas de `brew install` non figé).
+      # Mise à jour : nouvelle version + empreinte de xcodegen.zip (champ « digest » de la release).
+      - name: Installer XcodeGen
+        env:
+          XCODEGEN_VERSION: 2.46.0
+          XCODEGEN_SHA256: 4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806
         run: |
-          brew install xcodegen
-          xcodegen generate
+          set -euo pipefail
+          curl -fsSL -o "$RUNNER_TEMP/xcodegen.zip" \
+            "https://github.com/yonaskolb/XcodeGen/releases/download/${XCODEGEN_VERSION}/xcodegen.zip"
+          echo "${XCODEGEN_SHA256}  $RUNNER_TEMP/xcodegen.zip" | shasum -a 256 -c -
+          unzip -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP"
+
+      - name: Générer le projet Xcode
+        run: '"$RUNNER_TEMP/xcodegen/bin/xcodegen" generate'
 
       - name: Cache des paquets Swift (TDLib ~300 Mo)
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

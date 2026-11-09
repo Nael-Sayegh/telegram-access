@@ -21,15 +21,15 @@ struct PhoneNumberView: View {
                     }
                 }
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Pays")
                 .accessibilityValue(countryValue)
                 .accessibilityHint("Ouvre la liste des pays, avec recherche.")
                 .accessibilityAddTraits(.isButton)
+                .authField(.country, label: "Pays", auth: auth, isTextInput: false)
 
                 TextField("Numéro de téléphone", text: $number)
                     .keyboardType(.phonePad)
                     .textContentType(.telephoneNumber)
-                    .authField(label: "Numéro de téléphone", error: auth.errorMessage, errorCount: auth.errorCount)
+                    .authField(.phoneNumber, label: "Numéro de téléphone", auth: auth)
             } header: {
                 Text("Votre numéro de téléphone")
             } footer: {

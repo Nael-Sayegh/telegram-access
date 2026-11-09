@@ -13,15 +13,27 @@ extension AuthStep {
         case .authorizationStateWaitEmailAddress:
             self = .emailAddress
         case .authorizationStateWaitEmailCode(let value):
-            self = .emailCode(pattern: value.codeInfo.emailAddressPattern, length: value.codeInfo.length)
+            self = .emailCode(
+                pattern: value.codeInfo.emailAddressPattern,
+                length: knownLength(value.codeInfo.length)
+            )
         case .authorizationStateWaitCode(let value):
             self = .code(CodeInfo(value.codeInfo))
         case .authorizationStateWaitOtherDeviceConfirmation:
             self = .unsupported("La connexion par QR code n'est pas prise en charge.")
-        case .authorizationStateWaitRegistration:
-            self = .registration
+        case .authorizationStateWaitRegistration(let value):
+            let terms = value.termsOfService
+            self = .registration(RegistrationTerms(
+                text: terms.text.text,
+                minimumAge: terms.minUserAge,
+                requiresExplicitAcceptance: terms.showPopup
+            ))
         case .authorizationStateWaitPassword(let value):
-            self = .password(hint: value.passwordHint, hasRecoveryEmail: value.hasRecoveryEmailAddress)
+            self = .password(PasswordInfo(
+                hint: value.passwordHint,
+                hasRecoveryEmail: value.hasRecoveryEmailAddress,
+                recoveryEmailPattern: value.recoveryEmailAddressPattern
+            ))
         case .authorizationStateReady:
             self = .ready
         case .authorizationStateLoggingOut, .authorizationStateClosing:
@@ -33,13 +45,18 @@ extension AuthStep {
     }
 }
 
+/// TDLib indique 0 quand la longueur d'un code est inconnue.
+private func knownLength(_ length: Int) -> Int? {
+    length > 0 ? length : nil
+}
+
 extension CodeInfo {
     init(_ info: AuthenticationCodeInfo) {
         let current = Self.delivery(for: info.type)
         self.init(
             phoneNumber: info.phoneNumber,
             delivery: current.delivery,
-            codeLength: current.length,
+            codeLength: current.length.flatMap(knownLength),
             nextDelivery: info.nextType.map { Self.delivery(for: $0).delivery },
             resendTimeout: info.timeout
         )

@@ -2,9 +2,7 @@ import SwiftUI
 
 @main
 struct TelegramAccessApp: App {
-    @State private var auth = AuthViewModel(
-        config: AppConfig.isRunningUnitTests ? nil : AppConfig.fromBundle()
-    )
+    @State private var auth = TelegramAccessApp.makeAuthViewModel()
 
     var body: some Scene {
         WindowGroup {
@@ -14,6 +12,16 @@ struct TelegramAccessApp: App {
                     auth.start()
                 }
         }
+    }
+
+    @MainActor
+    private static func makeAuthViewModel() -> AuthViewModel {
+        #if DEBUG
+        if let scenario = UITestScenario.fromLaunchArguments() {
+            return AuthViewModel(config: UITestScenario.config) { _ in UITestAuthService(scenario: scenario) }
+        }
+        #endif
+        return AuthViewModel(config: AppConfig.isRunningUnitTests ? nil : AppConfig.fromBundle())
     }
 }
 
@@ -25,8 +33,11 @@ struct RootView: View {
         NavigationStack {
             content
         }
+        // Le contenu change sans navigation : on signale le nouvel écran à VoiceOver.
         .onChange(of: auth.step) {
-            // Le contenu change sans navigation : on signale le nouvel écran à VoiceOver.
+            AccessibilityNotification.ScreenChanged(nil).post()
+        }
+        .onChange(of: auth.isRecoveringPassword) {
             AccessibilityNotification.ScreenChanged(nil).post()
         }
     }
@@ -34,13 +45,16 @@ struct RootView: View {
     @ViewBuilder
     private var content: some View {
         switch auth.step {
-        case .starting, .loggingOut, .closed:
+        case .starting:
             ProgressView("Connexion à Telegram…")
+                .navigationTitle(Self.appName)
+        case .loggingOut, .closed:
+            ProgressView("Déconnexion…")
                 .navigationTitle(Self.appName)
         case .configurationMissing:
             ConfigurationMissingView()
         case .failed(let message):
-            FatalErrorView(message: message) { auth.restart() }
+            FatalErrorView(message: message) { auth.retry() }
         case .phoneNumber:
             PhoneNumberView(auth: auth)
         case .code(let info):
@@ -49,10 +63,14 @@ struct RootView: View {
             EmailAddressView(auth: auth)
         case .emailCode(let pattern, let length):
             EmailCodeView(auth: auth, emailPattern: pattern, codeLength: length)
-        case .password(let hint, _):
-            PasswordView(auth: auth, hint: hint)
-        case .registration:
-            RegistrationView(auth: auth)
+        case .password(let info):
+            if auth.isRecoveringPassword {
+                PasswordRecoveryView(auth: auth, info: info)
+            } else {
+                PasswordView(auth: auth, info: info)
+            }
+        case .registration(let terms):
+            RegistrationView(auth: auth, terms: terms)
         case .unsupported(let description):
             UnsupportedStepView(description: description) { auth.editPhoneNumber() }
         case .ready:
