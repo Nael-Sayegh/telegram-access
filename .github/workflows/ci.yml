@@ -24,16 +24,11 @@ jobs:
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
       # Tests UI (audits d'accessibilité) uniquement sur les PR, pour économiser les minutes macOS.
-      UI_TESTS: ${{ github.event_name == 'pull_request' && '1' || '0' }}
+      SCHEME: ${{ github.event_name == 'pull_request' && 'TelegramAccess' || 'TelegramAccessUnit' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-
-      - uses: ruby/setup-ruby@b3aaceaef7e0ee231b499e7b5f49c03fc1d32199 # v1.338.0
-        with:
-          ruby-version: '3.4'
-          bundler-cache: true
 
       - name: Générer le projet Xcode
         run: |
@@ -48,12 +43,21 @@ jobs:
           restore-keys: spm-${{ runner.os }}-
 
       - name: Tests
-        run: bundle exec fastlane test
+        run: |
+          set -euo pipefail
+          xcodebuild test \
+            -project TelegramAccess.xcodeproj \
+            -scheme "$SCHEME" \
+            -destination "platform=iOS Simulator,name=iPhone 17" \
+            -clonedSourcePackagesDirPath SourcePackages \
+            -resultBundlePath build/TestResults.xcresult \
+            -quiet \
+            CODE_SIGNING_ALLOWED=NO
 
       - name: Résultats de tests
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: test-results
-          path: build/test_output
+          path: build/TestResults.xcresult
           retention-days: 7

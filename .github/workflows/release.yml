@@ -1,5 +1,10 @@
 name: Release TestFlight
 
+# Signature gérée par Apple (cloud signing) : aucun certificat ni profil stocké.
+# Avec -allowProvisioningUpdates et la clé API App Store Connect, Xcode crée ou
+# renouvelle lui-même certificat de distribution et profil, puis l'export envoie
+# directement le build sur TestFlight. Configuration : docs/CONFIGURATION.md.
+
 on:
   push:
     tags: ['v*']
@@ -25,11 +30,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: ruby/setup-ruby@b3aaceaef7e0ee231b499e7b5f49c03fc1d32199 # v1.338.0
-        with:
-          ruby-version: '3.4'
-          bundler-cache: true
-
       - name: Générer le projet Xcode
         run: |
           brew install xcodegen
@@ -42,35 +42,100 @@ jobs:
           key: spm-${{ runner.os }}-${{ hashFiles('project.yml') }}
           restore-keys: spm-${{ runner.os }}-
 
-      - name: Écrire Config/Secrets.xcconfig
+      - name: Écrire les secrets sur le disque
         env:
           TG_API_ID: ${{ secrets.TG_API_ID }}
           TG_API_HASH: ${{ secrets.TG_API_HASH }}
+          APPSTORE_PRIVATE_KEY: ${{ secrets.APPSTORE_PRIVATE_KEY }}
         run: |
+          set -euo pipefail
           test -n "$TG_API_ID" && test -n "$TG_API_HASH" || { echo "::error::Secrets TG_API_ID / TG_API_HASH manquants"; exit 1; }
+          test -n "$APPSTORE_PRIVATE_KEY" || { echo "::error::Secret APPSTORE_PRIVATE_KEY manquant"; exit 1; }
           umask 077
+          KEY_PATH="$RUNNER_TEMP/private_keys/AuthKey.p8"
+          echo "KEY_PATH=$KEY_PATH" >> "$GITHUB_ENV"
           printf 'TG_API_ID = %s\nTG_API_HASH = %s\n' "$TG_API_ID" "$TG_API_HASH" > Config/Secrets.xcconfig
+          mkdir -p "$(dirname "$KEY_PATH")"
+          printf '%s\n' "$APPSTORE_PRIVATE_KEY" > "$KEY_PATH"
 
-      - name: Build, signature et upload
-        run: bundle exec fastlane beta
+      - name: Archiver (signature automatique via la clé API)
         env:
-          BUILD_NUMBER: ${{ github.run_number }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
-          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
-          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
-          MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+          APPSTORE_KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          APPSTORE_ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+          APPSTORE_TEAM_ID: ${{ secrets.APPSTORE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          xcodebuild archive \
+            -project TelegramAccess.xcodeproj \
+            -scheme TelegramAccess \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath build/TelegramAccess.xcarchive \
+            -clonedSourcePackagesDirPath SourcePackages \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$KEY_PATH" \
+            -authenticationKeyID "$APPSTORE_KEY_ID" \
+            -authenticationKeyIssuerID "$APPSTORE_ISSUER_ID" \
+            -quiet \
+            CODE_SIGN_STYLE=Automatic \
+            DEVELOPMENT_TEAM="$APPSTORE_TEAM_ID" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}"
+
+      - name: Générer ExportOptions.plist
+        env:
+          APPSTORE_TEAM_ID: ${{ secrets.APPSTORE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          cat > build/ExportOptions.plist <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>app-store-connect</string>
+              <key>destination</key>
+              <string>upload</string>
+              <key>signingStyle</key>
+              <string>automatic</string>
+              <key>teamID</key>
+              <string>${APPSTORE_TEAM_ID}</string>
+              <key>manageAppVersionAndBuildNumber</key>
+              <false/>
+              <key>uploadSymbols</key>
+              <true/>
+          </dict>
+          </plist>
+          PLIST
+
+      # destination "upload" : l'export envoie directement le build sur App Store Connect.
+      - name: Exporter et envoyer sur TestFlight
+        env:
+          APPSTORE_KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          APPSTORE_ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          xcodebuild -exportArchive \
+            -archivePath build/TelegramAccess.xcarchive \
+            -exportOptionsPlist build/ExportOptions.plist \
+            -exportPath build/export \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$KEY_PATH" \
+            -authenticationKeyID "$APPSTORE_KEY_ID" \
+            -authenticationKeyIssuerID "$APPSTORE_ISSUER_ID"
 
       - name: Supprimer les secrets du disque
         if: always()
-        run: rm -f Config/Secrets.xcconfig
+        run: rm -f Config/Secrets.xcconfig "${KEY_PATH:-}"
 
-      - name: Artefacts (IPA + dSYM)
+      - name: Compresser les dSYM
+        run: |
+          set -euo pipefail
+          cd build/TelegramAccess.xcarchive
+          ditto -c -k --keepParent dSYMs "$GITHUB_WORKSPACE/build/dSYMs-${{ github.run_number }}.zip"
+
+      - name: Artefact dSYM (symbolication des plantages)
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: testflight-${{ github.run_number }}
-          path: |
-            build/*.ipa
-            build/*.dSYM.zip
+          name: dsyms-${{ github.run_number }}
+          path: build/dSYMs-${{ github.run_number }}.zip
           retention-days: 7

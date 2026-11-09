@@ -5,10 +5,5 @@ updates:
     schedule:
       interval: weekly
 
-  - package-ecosystem: bundler
-    directory: /
-    schedule:
-      interval: weekly
-
 # TDLibKit est déclaré dans project.yml (XcodeGen), que Dependabot ne lit pas :
 # mise à jour manuelle du commit épinglé.

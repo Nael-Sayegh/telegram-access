@@ -22,17 +22,6 @@ SourcePackages/
 # Secrets générés par la CI
 Config/Secrets.xcconfig
 
-# fastlane
-fastlane/report.xml
-fastlane/Preview.html
-fastlane/screenshots/
-fastlane/test_output/
-fastlane/README.md
-
-# Ruby
-vendor/bundle/
-.bundle/
-
 # Divers
 .DS_Store
 xcuserdata/

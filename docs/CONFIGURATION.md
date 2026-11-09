@@ -4,18 +4,25 @@ Guide pas à pas pour permettre à la CI de signer l'app et de l'envoyer sur Tes
 Les valeurs secrètes ne doivent **jamais** être commitées, collées dans un ticket ou dans une conversation.
 Les conserver dans un gestionnaire de mots de passe.
 
+**Signature gérée par Apple** (même méthode qu'Accessplayer) : aucun certificat ni profil n'est stocké.
+Avec `-allowProvisioningUpdates` et la clé API App Store Connect, Xcode crée ou renouvelle lui-même le
+certificat de distribution et le profil à chaque build, puis l'export envoie le build sur TestFlight.
+
 État du dépôt `Nael-Sayegh/telegram-access` :
-- Environnement `release` **créé**, limité à la branche `main` et aux tags `v*`.
+- Environnement `release` **créé**, limité à la branche `main` et aux tags `v*`. Les secrets y sont rangés.
 - Relecteur obligatoire **indisponible** avec le forfait actuel (réservé aux forfaits payants pour les dépôts privés) : un tag `v*` déclenche donc l'envoi sans validation.
 
 ---
 
 ## 1. Apple Developer — identifiant d'équipe et bundle id
 
-Prérequis : adhésion **Apple Developer Program** active (99 $/an).
+Prérequis :
+- adhésion **Apple Developer Program** active ;
+- dernière version du contrat de licence acceptée sur developer.apple.com (sinon l'archive échoue avec « PLA Update available ») ;
+- accords **actifs** dans App Store Connect → Business (sinon l'envoi échoue avec `REQUIRED_AGREEMENTS_MISSING_OR_EXPIRED`).
 
-1. https://developer.apple.com/account → **Membership details** → noter le **Team ID** (10 caractères, ex. `AB12CD34EF`).
-   → secret `APPLE_TEAM_ID`
+1. https://developer.apple.com/account → **Membership details** → noter le **Team ID** (10 caractères).
+   → secret `APPSTORE_TEAM_ID` (même valeur que pour Accessplayer)
 2. **Certificates, Identifiers & Profiles** → **Identifiers** → **+** → **App IDs** → **App** :
    - Description : `Telegram Access`
    - Bundle ID : **Explicit** → `com.nael.telegramaccess`
@@ -36,15 +43,16 @@ https://appstoreconnect.apple.com → **Apps** → **+** → **Nouvelle app** :
 
 ## 3. Clé API App Store Connect
 
-**Utilisateurs et accès** → onglet **Intégrations** → **App Store Connect API** → **Clés d'équipe** → **+** :
-- Nom : `GitHub Actions`
-- Accès : **Admin** pour la génération initiale des certificats (`certs-init`). Une fois les certificats créés,
-  on peut révoquer cette clé et en créer une **App Manager**, suffisante pour l'envoi sur TestFlight.
+La clé d'équipe d'Accessplayer (rôle **App Manager**) vaut pour toutes les apps du compte : on peut **réutiliser
+les mêmes valeurs**. Pour pouvoir révoquer chaque app séparément, on peut aussi créer une clé dédiée :
+**Utilisateurs et accès** → **Intégrations** → **App Store Connect API** → **Clés d'équipe** → **+**,
+nom `GitHub Actions telegram-access`, accès **App Manager**.
 
-Noter :
-- **Key ID** (10 caractères) → secret `ASC_KEY_ID`
-- **Issuer ID** (UUID affiché en haut de la page) → secret `ASC_ISSUER_ID`
-- Télécharger `AuthKey_XXXXXXXXXX.p8` — **téléchargeable une seule fois**. Son contenu encodé en base64 → secret `ASC_KEY_P8`
+| Donnée | Secret |
+|---|---|
+| Key ID (10 caractères) | `APPSTORE_KEY_ID` |
+| Issuer ID (UUID en haut de la page) | `APPSTORE_ISSUER_ID` |
+| Contenu complet du fichier `AuthKey_XXXXXXXXXX.p8`, tel quel (téléchargeable une seule fois) | `APPSTORE_PRIVATE_KEY` |
 
 ## 4. Telegram — api_id et api_hash
 
@@ -59,52 +67,28 @@ Noter :
 
 Conseil : utiliser un compte secondaire pour les essais (les nouveaux `api_id` sont parfois restreints).
 
-## 5. Dépôt des certificats (fastlane match)
-
-1. Créer un dépôt **privé et vide** `Nael-Sayegh/telegram-access-certs` :
-   ```powershell
-   gh repo create Nael-Sayegh/telegram-access-certs --private
-   ```
-2. Créer un **jeton fine-grained** : https://github.com/settings/personal-access-tokens/new
-   - Nom : `match telegram-access`
-   - Expiration : 1 an (à renouveler)
-   - Resource owner : `Nael-Sayegh`
-   - Repository access : **Only select repositories** → `telegram-access-certs`
-   - Permissions → Repository → **Contents : Read and write** (écriture nécessaire pour `certs-init` ; on pourra ensuite créer un jeton **Read-only** pour les builds)
-3. Le secret `MATCH_GIT_BASIC_AUTHORIZATION` est le base64 de `Nael-Sayegh:<jeton>` (commande à l'étape 6).
-4. `MATCH_PASSWORD` : phrase de passe forte **générée par le gestionnaire de mots de passe**. Elle chiffre
-   les certificats dans le dépôt : la perdre oblige à tout régénérer.
-
-## 6. Enregistrer les secrets
+## 5. Enregistrer les secrets
 
 Les commandes ci-dessous (PowerShell) demandent chaque valeur sans l'afficher ni la garder dans l'historique.
-`gh secret set` sans valeur demande la saisie de façon masquée.
 
 ```powershell
 $R = "Nael-Sayegh/telegram-access"
 
-gh secret set APPLE_TEAM_ID  --env release --repo $R
-gh secret set ASC_KEY_ID     --env release --repo $R
-gh secret set ASC_ISSUER_ID  --env release --repo $R
-gh secret set TG_API_ID      --env release --repo $R
-gh secret set TG_API_HASH    --env release --repo $R
-gh secret set MATCH_PASSWORD --env release --repo $R
+gh secret set APPSTORE_TEAM_ID   --env release --repo $R
+gh secret set APPSTORE_KEY_ID    --env release --repo $R
+gh secret set APPSTORE_ISSUER_ID --env release --repo $R
+gh secret set TG_API_ID          --env release --repo $R
+gh secret set TG_API_HASH        --env release --repo $R
 ```
 
-Clé `.p8` encodée en base64 (adapter le chemin) :
+Clé `.p8` (adapter le chemin) :
 
 ```powershell
-[Convert]::ToBase64String([IO.File]::ReadAllBytes("$HOME\Downloads\AuthKey_XXXXXXXXXX.p8")) | gh secret set ASC_KEY_P8 --env release --repo $R
+Get-Content -Raw "$HOME\Downloads\AuthKey_XXXXXXXXXX.p8" | gh secret set APPSTORE_PRIVATE_KEY --env release --repo $R
 ```
 
-Jeton du dépôt de certificats :
-
-```powershell
-$s = Read-Host "Jeton GitHub" -AsSecureString
-$t = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($s))
-[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("Nael-Sayegh:$t")) | gh secret set MATCH_GIT_BASIC_AUTHORIZATION --env release --repo $R
-Remove-Variable s, t
-```
+Ou par l'interface : dépôt → **Settings** → **Environments** → `release` → **Add environment secret**
+(coller le contenu du `.p8` tel quel, lignes `BEGIN` / `END` comprises).
 
 Vérification (affiche les noms, jamais les valeurs) :
 
@@ -112,31 +96,22 @@ Vérification (affiche les noms, jamais les valeurs) :
 gh secret list --env release --repo $R
 ```
 
-Attendu : `APPLE_TEAM_ID`, `ASC_ISSUER_ID`, `ASC_KEY_ID`, `ASC_KEY_P8`, `MATCH_GIT_BASIC_AUTHORIZATION`,
-`MATCH_PASSWORD`, `TG_API_HASH`, `TG_API_ID`.
+Attendu : `APPSTORE_ISSUER_ID`, `APPSTORE_KEY_ID`, `APPSTORE_PRIVATE_KEY`, `APPSTORE_TEAM_ID`, `TG_API_HASH`, `TG_API_ID`.
 
-Ensuite, supprimer le fichier `.p8` de Téléchargements après l'avoir rangé dans le gestionnaire de mots de passe.
-
-## 7. Premier envoi sur TestFlight
+## 6. Premier envoi sur TestFlight
 
 1. `main` poussé sur GitHub et CI verte.
-2. Onglet **Actions** → **Initialisation des certificats (match)** → **Run workflow** (une seule fois).
-   Vérifier que `telegram-access-certs` contient maintenant des fichiers chiffrés.
-3. Optionnel : remplacer le jeton d'écriture par un jeton en lecture seule, et la clé Admin par une clé App Manager
-   (mettre à jour les secrets correspondants).
-4. Taguer et pousser :
+2. Taguer et pousser (ou onglet **Actions** → **Release TestFlight** → **Run workflow**) :
    ```powershell
    git tag v0.1.0
    git push origin v0.1.0
    ```
-5. Le workflow **Release TestFlight** envoie le build. Après traitement par Apple (10 à 30 min),
-   répondre à la question sur le chiffrement dans App Store Connect → TestFlight, puis s'ajouter comme testeur interne
-   et installer via l'app **TestFlight** sur l'iPhone.
+3. Après traitement par Apple (10 à 30 min), répondre à la question sur le chiffrement dans
+   App Store Connect → TestFlight, s'ajouter comme testeur interne et installer via l'app **TestFlight**.
 
-## Rotation et expiration
+## Rotation et révocation
 
-| Élément | Durée | Action |
-|---|---|---|
-| Certificat de distribution | 1 an | relancer `certs-init` |
-| Jeton fine-grained | durée choisie | régénérer, mettre à jour `MATCH_GIT_BASIC_AUTHORIZATION` |
-| Clé API ASC | illimitée | révoquer immédiatement en cas de fuite |
+| Élément | Action |
+|---|---|
+| Certificat de distribution | renouvelé automatiquement par Xcode |
+| Clé API ASC | révoquer immédiatement en cas de fuite, puis mettre à jour `APPSTORE_*` (ici et dans Accessplayer si la clé est partagée) |

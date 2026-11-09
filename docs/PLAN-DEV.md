@@ -14,7 +14,7 @@
 | Accès Telegram | **TDLib** via [TDLibKit](https://github.com/Swiftgram/TDLibKit) (SPM) | MTProto, chiffrement, synchro, base locale chiffrée gérés officiellement |
 | Architecture | MVVM, `actor TelegramClient`, async/await, `AsyncStream` des updates | Isolation, testabilité |
 | Projet Xcode | **XcodeGen** (`project.yml`), `.xcodeproj` non versionné | Éditable sous Windows |
-| CI/CD | **GitHub Actions macOS** + **fastlane** (match, gym, pilot) | Pas de Mac local nécessaire |
+| CI/CD | **GitHub Actions macOS** + `xcodebuild`, signature gérée par Apple | Pas de Mac local, aucun certificat à stocker |
 | Dépendances | Minimum, aucun SDK analytics/tracking tiers | Confidentialité |
 
 Telegram : obtenir `api_id` / `api_hash` sur https://my.telegram.org, respecter les [API Terms](https://core.telegram.org/api/terms) (client non officiel clairement indiqué, pas de logo officiel, nom non trompeur). Tester avec un compte secondaire (risque de restriction des nouveaux `api_id`).
@@ -35,65 +35,29 @@ Telegram : obtenir `api_id` / `api_hash` sur https://my.telegram.org, respecter 
 gh repo create telegram-access --private --source . --remote origin
 ```
 - Protection de `main` : PR obligatoire + CI verte.
-- Dependabot (Swift packages + GitHub Actions), secret scanning + push protection.
+- Dependabot (GitHub Actions), secret scanning + push protection.
 - `.gitignore` : `*.xcodeproj`, `build/`, `*.p12`, `*.mobileprovision`, `Config/Secrets.xcconfig`.
 - Secrets injectés à la compilation via un `.xcconfig` généré par la CI.
 
-### 0.3 Signature sans Mac : fastlane match
-- Certificats + profils stockés **chiffrés** dans un **second dépôt privé** (`telegram-access-certs`).
-- Génération initiale via un workflow manuel `certs-init.yml` (`match appstore`) avec la clé API ASC.
-- Builds suivants en `readonly: true`.
+### 0.3 Signature sans Mac : signature gérée par Apple
+- Pas de certificat ni de profil stocké (ni dépôt secondaire, ni fastlane) : même méthode qu'Accessplayer.
+- `xcodebuild archive` / `-exportArchive` avec `-allowProvisioningUpdates` et la clé API ASC (rôle App Manager) : Xcode crée ou renouvelle certificat de distribution et profil, et l'export (`destination: upload`) envoie le build sur TestFlight.
 
 ### 0.4 Secrets GitHub (environment `release`, limité à `main` et aux tags `v*`)
 Approbation manuelle (relecteur obligatoire) indisponible avec le forfait gratuit pour un dépôt privé. Procédure détaillée : [CONFIGURATION.md](CONFIGURATION.md).
 
 | Secret | Usage |
 |---|---|
-| `APPLE_TEAM_ID` | Identifiant d'équipe Apple Developer (signature) |
-| `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8` (base64) | Clé API App Store Connect |
-| `MATCH_PASSWORD` | Déchiffrement du dépôt de certificats |
-| `MATCH_GIT_BASIC_AUTHORIZATION` | Jeton lecture du dépôt certificats |
+| `APPSTORE_TEAM_ID` | Identifiant d'équipe Apple Developer (signature) |
+| `APPSTORE_KEY_ID`, `APPSTORE_ISSUER_ID`, `APPSTORE_PRIVATE_KEY` (contenu du `.p8`) | Clé API App Store Connect (mêmes noms qu'Accessplayer) |
 | `TG_API_ID`, `TG_API_HASH` | API Telegram |
 
 Les builds de PR n'ont pas accès aux secrets de signature.
 
 ### 0.5 Workflows
-**`ci.yml`** (push + PR) : `xcodegen generate` → build simulateur sans signature → tests unitaires + UI (dont `performAccessibilityAudit()`) → cache SPM / TDLib.
+**`ci.yml`** (push + PR) : `xcodegen generate` → `xcodebuild test` sur simulateur sans signature → tests unitaires, + tests UI (dont `performAccessibilityAudit()`) sur les PR → cache SPM / TDLib.
 
-**`release.yml`** (tag `v*` ou manuel) : `match` → `gym` (build number = `github.run_number`) → **`upload_to_testflight`** → artefacts IPA + dSYM (rétention courte).
-
-```yaml
-name: Release TestFlight
-on:
-  push:
-    tags: ['v*']
-  workflow_dispatch:
-
-permissions:
-  contents: read
-
-jobs:
-  testflight:
-    runs-on: macos-26          # Xcode 26.6 : SDK iOS 26 exigé pour l'envoi App Store
-    environment: release
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@<sha>   # épingler les actions par SHA
-      - run: sudo xcode-select -s /Applications/Xcode_26.6.app
-      - run: brew install xcodegen && xcodegen generate
-      - name: Secrets.xcconfig
-        run: |
-          echo "TG_API_ID=${{ secrets.TG_API_ID }}"    >  Config/Secrets.xcconfig
-          echo "TG_API_HASH=${{ secrets.TG_API_HASH }}" >> Config/Secrets.xcconfig
-      - run: bundle install && bundle exec fastlane beta
-        env:
-          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
-          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
-          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
-          MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
-```
-Lane `beta` : `setup_ci` → `app_store_connect_api_key` → `match(readonly: true)` → `increment_build_number` → `gym` → `upload_to_testflight`.
+**`release.yml`** (tag `v*` ou manuel) : `xcodegen generate` → `Secrets.xcconfig` + clé `.p8` écrits dans le runner → `xcodebuild archive` (signature automatique, build number = `github.run_number`) → `xcodebuild -exportArchive` (envoi TestFlight) → suppression des secrets → artefact dSYM (rétention courte).
 
 ### 0.6 Coût en minutes
 - Dépôt privé : **1 min macOS = 10 min décomptées** → forfait gratuit ≈ 200 min macOS/mois (10–15 builds).
@@ -199,7 +163,7 @@ Push chiffrées, groupes et canaux (admin de base), recherche dans une conversat
 - Tests manuels VoiceOver avec rideau d'écran ; Accessibility Inspector.
 - **Tests avec des utilisateurs VoiceOver** (AVH, FAF…) via **TestFlight externe**.
 - Audit du stockage (rien en clair dans le conteneur / les sauvegardes), revue des dépendances.
-- Soumission App Store via lane fastlane `release` (`deliver`), déclenchée manuellement avec approbation de l'environnement `release` ; métadonnées dans `fastlane/metadata/`.
+- Soumission App Store depuis App Store Connect à partir d'un build TestFlight (métadonnées et captures saisies dans App Store Connect).
 - Privacy manifest, étiquettes de confidentialité, règle 1.2 (signaler / bloquer), mention « client non officiel ».
 
 ---
@@ -229,20 +193,15 @@ telegram-access/                  # dépôt GitHub privé
 ├── .github/
 │   ├── workflows/
 │   │   ├── ci.yml                # build + tests à chaque push / PR
-│   │   ├── release.yml           # archive signée → TestFlight
-│   │   └── certs-init.yml        # manuel : génération initiale match
+│   │   └── release.yml           # archive signée (gérée par Apple) → TestFlight
 │   └── dependabot.yml
 ├── project.yml                   # XcodeGen
 ├── Config/
 │   ├── Base.xcconfig
 │   └── Secrets.xcconfig.example  # Secrets.xcconfig généré en CI, ignoré
-├── fastlane/
-│   ├── Fastfile                  # lanes test, beta, release
-│   ├── Matchfile
-│   └── metadata/
-├── Gemfile
 ├── docs/
-│   └── PLAN-DEV.md               # ce document
+│   ├── PLAN-DEV.md               # ce document
+│   └── CONFIGURATION.md          # comptes Apple / Telegram et secrets
 ├── Sources/
 │   ├── App/
 │   ├── Core/{TDLib,Security,Accessibility}/
@@ -253,13 +212,13 @@ telegram-access/                  # dépôt GitHub privé
 ## Avancement
 
 **Fait (2026-11-08)**
-- Phase 0 : arborescence, `project.yml` (TDLibKit épinglé au commit du tag `1.5.2-tdlib-1.8.69-fb464979`), `Config/*.xcconfig`, `fastlane/` (lanes `test`, `beta`, `certs_init`), workflows `ci.yml`, `release.yml`, `certs-init.yml` (actions épinglées par SHA), Dependabot (actions + bundler ; TDLibKit à mettre à jour à la main), icône provisoire.
+- Phase 0 : arborescence, `project.yml` (TDLibKit épinglé au commit du tag `1.5.2-tdlib-1.8.69-fb464979`), `Config/*.xcconfig`, workflows `ci.yml` et `release.yml` (actions épinglées par SHA), environnement `release`, Dependabot (actions ; TDLibKit à mettre à jour à la main), icône provisoire.
+- 2026-11-09 : fastlane match remplacé par la signature gérée par Apple (comme Accessplayer) — plus de dépôt de certificats ni de fastlane.
 - Phase 1 (première version, **non compilée** faute de Mac — la CI fera foi) : `actor TelegramClient`, machine à états (`AuthStep`), écrans téléphone + sélecteur de pays (liste TDLib `getCountries`), code, e-mail, code e-mail, mot de passe 2FA, inscription, déconnexion ; clé de base dans le trousseau ; libellés VoiceOver et messages d'erreur testés unitairement ; audit d'accessibilité en test UI.
 
 **Reste à faire côté compte (manuel)**
-- Créer le dépôt privé `telegram-access` et le dépôt `telegram-access-certs`.
 - Apple Developer : bundle id `com.nael.telegramaccess`, fiche App Store Connect, clé API ASC.
-- Renseigner les secrets de l'environnement `release`, lancer `certs-init`, puis taguer `v0.1.0`.
+- Renseigner les secrets de l'environnement `release` (cf. [CONFIGURATION.md](CONFIGURATION.md)), puis taguer `v0.1.0`.
 
 **Décisions en attente**
 - Nom affiché définitif (provisoire : « Accessigram », dans `Config/Base.xcconfig`) — doit respecter les conditions de Telegram.
