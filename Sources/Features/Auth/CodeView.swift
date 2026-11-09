@@ -34,6 +34,7 @@ struct CodeView: View {
             } footer: {
                 if info.nextDelivery != nil {
                     Text(AuthLabels.resendAvailability(after: info.resendTimeout))
+                        .readableSecondary()
                 }
             }
         }

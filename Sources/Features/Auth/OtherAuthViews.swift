@@ -19,8 +19,10 @@ struct PasswordView: View {
                 }
             } header: {
                 Text("Validation en deux étapes")
+                    .readableSecondary()
             } footer: {
                 Text("Votre compte est protégé par un mot de passe supplémentaire.")
+                    .readableSecondary()
             }
 
             ErrorSection(message: auth.errorMessage)
@@ -38,6 +40,7 @@ struct PasswordView: View {
             } footer: {
                 if !info.hasRecoveryEmail {
                     Text("Aucune adresse e-mail de récupération n'est configurée pour ce compte : le mot de passe ne peut pas être récupéré depuis cette application.")
+                        .readableSecondary()
                 }
             }
         }
@@ -75,8 +78,10 @@ struct PasswordRecoveryView: View {
                     .authField(.passwordHint, label: "Indice, facultatif", auth: auth)
             } header: {
                 Text("Nouveau mot de passe")
+                    .readableSecondary()
             } footer: {
                 Text("La validation en deux étapes reste active avec ce nouveau mot de passe. L'indice est visible par toute personne qui tente de se connecter : il ne doit pas révéler le mot de passe.")
+                    .readableSecondary()
             }
 
             ErrorSection(message: auth.errorMessage)
@@ -117,6 +122,7 @@ struct EmailAddressView: View {
                     .authField(.emailAddress, label: "Adresse e-mail", auth: auth)
             } footer: {
                 Text("Telegram demande une adresse e-mail pour sécuriser la connexion.")
+                    .readableSecondary()
             }
 
             ErrorSection(message: auth.errorMessage)
@@ -180,6 +186,7 @@ struct RegistrationView: View {
                     .authField(.lastName, label: "Nom, facultatif", auth: auth)
             } header: {
                 Text("Nouveau compte Telegram")
+                    .readableSecondary()
             }
 
             Section {
@@ -189,6 +196,7 @@ struct RegistrationView: View {
                 }
             } footer: {
                 Text(termsFooter)
+                    .readableSecondary()
             }
 
             ErrorSection(message: auth.errorMessage)

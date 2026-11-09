@@ -67,6 +67,8 @@ struct ErrorSection: View {
 }
 
 /// Bouton principal d'un écran, annoncé « en cours » pendant l'envoi.
+/// Le libellé est posé directement sur le `Button` : `.accessibilityElement(children:)` sur un
+/// bouton crée un second élément de même nom (doublon pour VoiceOver et les tests UI).
 struct SubmitButton: View {
     let title: String
     let isBusy: Bool
@@ -79,13 +81,20 @@ struct SubmitButton: View {
                 if isBusy {
                     Spacer()
                     ProgressView()
+                        .accessibilityHidden(true)
                 }
             }
         }
         .disabled(isBusy)
-        .accessibilityElement(children: .ignore)
         .accessibilityLabel(isBusy ? "\(title), en cours" : title)
-        .accessibilityAddTraits(.isButton)
+    }
+}
+
+extension View {
+    /// Texte secondaire lisible. Les gris système (`.secondary`, en-têtes et pieds de section)
+    /// n'atteignent pas tout à fait le contraste exigé par l'audit d'accessibilité.
+    func readableSecondary() -> some View {
+        foregroundStyle(Color.primary.opacity(0.75))
     }
 }
 
@@ -101,5 +110,6 @@ struct ChangePhoneNumberButton: View {
 struct AppDisclaimer: View {
     var body: some View {
         Text("\(RootView.appName) est un client Telegram non officiel.")
+            .readableSecondary()
     }
 }

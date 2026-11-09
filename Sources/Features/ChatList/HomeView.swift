@@ -10,12 +10,14 @@ struct HomeView: View {
             Section {
                 Text("Vous êtes connecté.")
                 Text("La liste des conversations sera disponible dans une prochaine version.")
-                    .foregroundStyle(.secondary)
+                    .readableSecondary()
             }
             Section {
                 Button("Se déconnecter", role: .destructive) {
                     confirmsLogout = true
                 }
+                // Rouge plus contrasté que le rouge système (audit d'accessibilité).
+                .foregroundStyle(Color("DestructiveColor"))
                 .disabled(auth.isBusy)
             } footer: {
                 AppDisclaimer()
