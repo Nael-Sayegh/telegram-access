@@ -220,13 +220,14 @@ telegram-access/                  # dépôt GitHub privé
 - 2026-11-09 : fastlane match remplacé par la signature gérée par Apple (comme Accessplayer) — plus de dépôt de certificats ni de fastlane.
 - Phase 1 : `actor TelegramClient` (derrière le protocole `AuthService`), machine à états (`AuthStep`), écrans téléphone + sélecteur de pays (liste TDLib `getCountries`), code, e-mail, code e-mail, mot de passe 2FA, inscription, déconnexion ; clé de base dans le trousseau. CI verte et build `v0.1.1` envoyé sur TestFlight le 2026-11-09.
 - 2026-11-09, revue de la phase 1 : conditions d'utilisation affichées à l'inscription, « Mot de passe oublié », longueur de code inconnue (0) gérée, erreur rattachée au champ fautif (pays, nom…) avec annonce si le focus y est déjà, « Déconnexion… » pendant la déconnexion, « Réessayer » sans recréer de client TDLib, clé créée après l'effacement du dossier, effacement du dossier et de la clé à la déconnexion, journaux TDLib coupés en Release, chiffres saisis normalisés en ASCII, `SWIFT_STRICT_CONCURRENCY: complete`, XcodeGen épinglé, release sans cache ; tests unitaires de `AuthViewModel` (service factice) et audits UI de chaque écran.
+- 2026-11-09 : `ITSAppUsesNonExemptEncryption = NO` dans `Info.plist` → App Store Connect ne pose plus la question du chiffrement à chaque build. Valable tant que l'app n'est pas disponible en France sur l'App Store (algorithmes standard via TDLib/OpenSSL : seule la déclaration française serait exigée). Détails : `docs/CONFIGURATION.md`.
 
 **Reste à faire côté compte (manuel)**
-- Aucun pour l'instant (secrets `release` en place, envoi TestFlight fonctionnel).
+- Rien de bloquant pour TestFlight (secrets `release` en place, envoi fonctionnel).
+- Avant de rendre l'app disponible en France sur l'App Store : déclaration ANSSI, envoi dans App Store Connect, puis `ITSAppUsesNonExemptEncryption = YES` + `ITSEncryptionExportComplianceCode` (voir `docs/CONFIGURATION.md`).
 
 **Décisions en attente**
 - Nom affiché définitif (provisoire : « Accessigram », dans `Config/Base.xcconfig`) — doit respecter les conditions de Telegram.
-- `ITSAppUsesNonExemptEncryption` (déclaration export du chiffrement) à trancher avant TestFlight externe.
 - Push chiffrées (phase 6) : l'extension de notification doit lire la base TDLib appareil verrouillé, ce qui est incompatible avec `completeUnlessOpen` et la clé `WhenUnlockedThisDeviceOnly` → choisir avant la phase 6 (ex. `completeUntilFirstUserAuthentication` + `AfterFirstUnlockThisDeviceOnly` en App Group, avec migration de la clé).
 
 **Prochaine étape** : lancer la CI manuellement (audits UI), test VoiceOver sur iPhone via TestFlight (annonce des erreurs, conditions d'utilisation, récupération du mot de passe), puis phase 2 (liste des conversations).

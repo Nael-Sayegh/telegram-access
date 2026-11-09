@@ -107,8 +107,30 @@ Attendu : `APPSTORE_ISSUER_ID`, `APPSTORE_KEY_ID`, `APPSTORE_PRIVATE_KEY`, `APPS
    git tag v0.1.0
    git push origin v0.1.0
    ```
-3. Après traitement par Apple (10 à 30 min), répondre à la question sur le chiffrement dans
-   App Store Connect → TestFlight, s'ajouter comme testeur interne et installer via l'app **TestFlight**.
+3. Après traitement par Apple (10 à 30 min), s'ajouter comme testeur interne dans
+   App Store Connect → TestFlight et installer via l'app **TestFlight**. La question sur le
+   chiffrement n'est plus posée (voir ci-dessous).
+
+## 7. Chiffrement (export compliance) et France
+
+`Sources/App/Info.plist` déclare `ITSAppUsesNonExemptEncryption = NO` : App Store Connect ne
+demande plus le type de chiffrement à chaque build.
+
+Ce choix correspond aux réponses suivantes au questionnaire d'Apple :
+- type d'algorithmes : **standard** (TDLib embarque OpenSSL : AES, RSA, Diffie-Hellman, SHA-256 ;
+  ni « aucun », ni « propriétaires ») ;
+- disponible en France sur l'App Store : **non** → aucune documentation requise.
+
+Il n'est donc valable que si la France reste **décochée** dans App Store Connect → Tarifs et
+disponibilité. Avant de rendre l'app disponible en France :
+
+1. Déposer la « Déclaration relative à un moyen de cryptologie » auprès de l'ANSSI
+   (démarche en ligne sur demarche.numerique.gouv.fr, gratuite, jusqu'à 2 mois).
+2. Envoyer le document obtenu dans App Store Connect → l'app → Informations sur l'app →
+   documentation de chiffrement. Apple l'examine (environ 2 jours ouvrés) et fournit une clé.
+3. Dans `Info.plist` : `ITSAppUsesNonExemptEncryption` à `YES` et ajouter
+   `ITSEncryptionExportComplianceCode` avec cette clé.
+4. Seulement ensuite, cocher la France dans la disponibilité.
 
 ## Rotation et révocation
 
