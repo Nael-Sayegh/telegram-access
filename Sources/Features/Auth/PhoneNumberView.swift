@@ -26,7 +26,9 @@ struct PhoneNumberView: View {
                 .accessibilityHint("Ouvre la liste des pays, avec recherche.")
                 .authField(.country, label: "Pays", auth: auth, isTextInput: false)
 
-                TextField("Numéro de téléphone", text: $number)
+                // Texte indicatif court : un texte long est tronqué aux grandes tailles de police.
+                // Le libellé VoiceOver complet est posé par `authField`.
+                TextField("Numéro", text: $number)
                     .keyboardType(.phonePad)
                     .textContentType(.telephoneNumber)
                     .authField(.phoneNumber, label: "Numéro de téléphone", auth: auth)

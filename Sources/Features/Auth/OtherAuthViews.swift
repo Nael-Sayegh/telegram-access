@@ -61,26 +61,29 @@ struct PasswordRecoveryView: View {
         Form {
             Section {
                 Text(AuthLabels.recoveryCodeSent(pattern: info.recoveryEmailPattern))
-                TextField("Code de récupération", text: $code)
+                // Textes indicatifs courts (pas de troncature aux grandes tailles de police) ;
+                // libellés VoiceOver complets.
+                TextField("Code", text: $code)
                     .keyboardType(.numberPad)
                     .textContentType(.oneTimeCode)
                     .authField(.recoveryCode, label: "Code de récupération", auth: auth)
             }
 
             Section {
-                SecureField("Nouveau mot de passe", text: $newPassword)
+                SecureField("Mot de passe", text: $newPassword)
                     .textContentType(.newPassword)
                     .authField(.newPassword, label: "Nouveau mot de passe", auth: auth)
-                SecureField("Confirmation du nouveau mot de passe", text: $confirmation)
+                SecureField("Confirmation", text: $confirmation)
                     .textContentType(.newPassword)
-                TextField("Indice (facultatif)", text: $hint)
+                    .accessibilityLabel("Confirmation du nouveau mot de passe")
+                TextField("Indice", text: $hint)
                     .autocorrectionDisabled()
                     .authField(.passwordHint, label: "Indice, facultatif", auth: auth)
             } header: {
                 Text("Nouveau mot de passe")
                     .readableSecondary()
             } footer: {
-                Text("La validation en deux étapes reste active avec ce nouveau mot de passe. L'indice est visible par toute personne qui tente de se connecter : il ne doit pas révéler le mot de passe.")
+                Text("La validation en deux étapes reste active avec ce nouveau mot de passe. L'indice est facultatif et visible par toute personne qui tente de se connecter : il ne doit pas révéler le mot de passe.")
                     .readableSecondary()
             }
 
@@ -181,11 +184,14 @@ struct RegistrationView: View {
                 TextField("Prénom", text: $firstName)
                     .textContentType(.givenName)
                     .authField(.firstName, label: "Prénom", auth: auth)
-                TextField("Nom (facultatif)", text: $lastName)
+                TextField("Nom", text: $lastName)
                     .textContentType(.familyName)
                     .authField(.lastName, label: "Nom, facultatif", auth: auth)
             } header: {
                 Text("Nouveau compte Telegram")
+                    .readableSecondary()
+            } footer: {
+                Text("Le nom est facultatif.")
                     .readableSecondary()
             }
 
