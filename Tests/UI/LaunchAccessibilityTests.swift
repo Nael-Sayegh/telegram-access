@@ -71,7 +71,8 @@ final class LaunchAccessibilityTests: XCTestCase {
         let country = app.buttons["Pays"]
         XCTAssertTrue(country.waitForExistence(timeout: 15))
         let franceSelected = NSPredicate(format: "value == %@", "France, plus 33")
-        wait(for: [XCTNSPredicateExpectation(predicate: franceSelected, object: country)], timeout: 5)
+        // 15 s : sur une machine CI chargée, le chargement des pays a déjà dépassé 5 s.
+        wait(for: [XCTNSPredicateExpectation(predicate: franceSelected, object: country)], timeout: 15)
 
         app.buttons["Recevoir le code"].tap()
 

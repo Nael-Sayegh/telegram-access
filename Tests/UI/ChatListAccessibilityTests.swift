@@ -93,10 +93,11 @@ final class ChatListAccessibilityTests: XCTestCase {
         app.buttons["Rechercher"].tap()
         XCTAssertTrue(app.navigationBars["Rechercher"].waitForExistence(timeout: 5))
 
-        let field = app.textFields["Rechercher dans les messages"]
+        // Champ sur plusieurs lignes : vu comme une zone de texte, d'où la recherche par libellé.
+        let field = element(app, "Rechercher dans les messages")
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         field.tap()
-        field.typeText("demain\n")
+        app.typeText("demain\n")
         let message = element(app, "Marie Dupont, On se voit demain ?, 9 h 05")
         XCTAssertTrue(message.waitForExistence(timeout: 5), "Message trouvé absent")
         try AccessibilityAudit.run(app)

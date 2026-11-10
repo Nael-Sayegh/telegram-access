@@ -14,12 +14,15 @@ struct GlobalSearchView: View {
     var body: some View {
         List {
             Section {
-                TextField(search.scope.prompt, text: $search.query)
+                // Champ sur plusieurs lignes : sur une seule, l'audit signalait son texte comme
+                // coupé aux grandes tailles. La touche Rechercher insère alors un retour à la
+                // ligne : on le retire et on lance la recherche (voir `onChange`).
+                TextField(search.scope.prompt, text: $search.query, axis: .vertical)
+                    .lineLimit(1...4)
                     .focused($isFieldFocused)
                     .submitLabel(.search)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
-                    .onSubmit { search.submit() }
                 ChoiceChips(
                     label: "Rechercher dans",
                     options: SearchScope.allCases,
@@ -32,7 +35,15 @@ struct GlobalSearchView: View {
         .listStyle(.plain)
         .navigationTitle("Rechercher")
         .navigationBarTitleDisplayMode(.inline)
-        .onChange(of: search.query) { search.queryChanged() }
+        .onChange(of: search.query) {
+            if search.query.contains("\n") {
+                search.query = search.query.replacingOccurrences(of: "\n", with: "")
+                isFieldFocused = false
+                search.submit()
+            } else {
+                search.queryChanged()
+            }
+        }
         .task {
             // Après l'animation d'arrivée sur l'écran : le clavier s'ouvre sur le champ.
             try? await Task.sleep(for: .milliseconds(400))
@@ -65,17 +76,21 @@ struct SearchResults: View {
             }
         }
         if !chats.isEmpty {
-            Section("Conversations") {
+            Section {
                 chatLinks(chats, now: now)
+            } header: {
+                SectionTitle("Conversations")
             }
         }
         if !publicChats.isEmpty {
-            Section("Groupes et chaînes publics") {
+            Section {
                 chatLinks(publicChats, now: now)
+            } header: {
+                SectionTitle("Groupes et chaînes publics")
             }
         }
         if !search.messages.isEmpty {
-            Section("Messages") {
+            Section {
                 ForEach(search.messages) { row in
                     NavigationLink(value: ChatRoute.chat(row.chatId)) {
                         SearchMessageView(row: row, now: now)
@@ -88,6 +103,8 @@ struct SearchResults: View {
                     }
                     .disabled(search.isSearching)
                 }
+            } header: {
+                SectionTitle("Messages")
             }
         }
     }
@@ -99,6 +116,23 @@ struct SearchResults: View {
             }
             .chatRowAccessibility(row, now: now)
         }
+    }
+}
+
+/// Titre de section en couleur de texte principale : le gris système des en-têtes de liste
+/// n'atteint pas le contraste exigé par l'audit. Annoncé comme en-tête par VoiceOver.
+private struct SectionTitle: View {
+    let title: String
+
+    init(_ title: String) {
+        self.title = title
+    }
+
+    var body: some View {
+        Text(title)
+            .font(.headline)
+            .foregroundStyle(Color.primary)
+            .accessibilityAddTraits(.isHeader)
     }
 }
 
