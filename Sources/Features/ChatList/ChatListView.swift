@@ -10,6 +10,7 @@ enum ChatRoute: Hashable {
 struct ChatListView: View {
     @Bindable var auth: AuthViewModel
     @State private var model: ChatListViewModel
+    @State private var search: GlobalSearchViewModel
     @State private var confirmsLogout = false
     @Namespace private var rotorNamespace
     private let service: any ChatListService
@@ -18,40 +19,33 @@ struct ChatListView: View {
         self.auth = auth
         self.service = service
         _model = State(initialValue: ChatListViewModel(list: .main, store: store, service: service))
+        _search = State(initialValue: GlobalSearchViewModel(store: store, service: service))
     }
 
     var body: some View {
         List {
-            Section {
-                ChatFilterBar(model: model)
-            }
-            if let connection = model.connectionText {
-                Section {
-                    // Pas de `Label` : l'audit Dynamic Type signale son texte comme coupé aux
-                    // grandes tailles. Ici le texte passe à la ligne.
-                    IconText(text: connection, systemImage: "wifi.exclamationmark")
-                        .readableSecondary()
-                }
-            }
-            Section {
-                if let archive = archiveLabel, model.filter == .all {
-                    NavigationLink(value: ChatRoute.archive) {
-                        IconText(text: "Archives", systemImage: "archivebox")
-                    }
-                    .accessibilityLabel(archive)
-                }
-                ChatRows(model: model, emptyText: model.filter.emptyText, rotorNamespace: rotorNamespace)
-            } footer: {
-                AppDisclaimer()
+            if search.isActive {
+                SearchResults(search: search)
+            } else {
+                listSections
             }
         }
         .listStyle(.plain)
         .chatRotors(model, namespace: rotorNamespace)
         .navigationTitle("Discussions")
-        // Ordre VoiceOver constant : « Options » puis « Discussions ». Avec un grand titre, le
-        // titre passait de sous la barre (lu après Options) à dans la barre (lu avant) au
-        // défilement. Titre toujours dans la barre et Options à gauche : lu en premier.
+        // Ordre VoiceOver constant : « Options », « Discussions », puis le champ de recherche.
+        // Avec un grand titre, le titre passait de sous la barre (lu après Options) à dans la
+        // barre (lu avant) au défilement. Titre toujours dans la barre, Options à gauche, champ
+        // de recherche toujours affiché.
         .navigationBarTitleDisplayMode(.inline)
+        .searchable(
+            text: $search.query,
+            placement: .navigationBarDrawer(displayMode: .always),
+            // Court : un texte indicatif long serait coupé dans le champ.
+            prompt: "Rechercher"
+        )
+        .onChange(of: search.query) { search.queryChanged() }
+        .onSubmit(of: .search) { search.submit() }
         .navigationDestination(for: ChatRoute.self) { route in
             switch route {
             case .chat(let chatId):
@@ -83,6 +77,32 @@ struct ChatListView: View {
         }
         .onChange(of: auth.errorCount) {
             if let message = auth.errorMessage { Announcer.announce(message) }
+        }
+    }
+
+    @ViewBuilder
+    private var listSections: some View {
+        Section {
+            ChatFilterBar(model: model)
+        }
+        if let connection = model.connectionText {
+            Section {
+                // Pas de `Label` : l'audit Dynamic Type signale son texte comme coupé aux
+                // grandes tailles. Ici le texte passe à la ligne.
+                IconText(text: connection, systemImage: "wifi.exclamationmark")
+                    .readableSecondary()
+            }
+        }
+        Section {
+            if let archive = archiveLabel, model.filter == .all {
+                NavigationLink(value: ChatRoute.archive) {
+                    IconText(text: "Archives", systemImage: "archivebox")
+                }
+                .accessibilityLabel(archive)
+            }
+            ChatRows(model: model, emptyText: model.filter.emptyText, rotorNamespace: rotorNamespace)
+        } footer: {
+            AppDisclaimer()
         }
     }
 

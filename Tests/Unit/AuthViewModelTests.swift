@@ -123,10 +123,29 @@ actor FakeAuthService: TelegramService {
         try throwIfNeeded()
         chatCalls.append("delete \(chat.id) \(forEveryone)")
     }
-    func searchChats(_ query: String, limit: Int) -> [Int64] { [] }
-    func searchPublicChats(_ query: String) -> [Int64] { [] }
+    /// Recherches de messages reçues : « requête|décalage ».
+    private(set) var messageSearches: [String] = []
+    private var foundChats: [Int64] = []
+    private var foundPublicChats: [Int64] = []
+    /// Pages de messages renvoyées dans l'ordre, puis une page vide.
+    private var messagePages: [MessageSearchPage] = []
+
+    func setSearchResults(chats: [Int64], publicChats: [Int64] = [], messagePages: [MessageSearchPage] = []) {
+        foundChats = chats
+        foundPublicChats = publicChats
+        self.messagePages = messagePages
+    }
+
+    func searchChats(_ query: String, limit: Int) throws -> [Int64] {
+        try throwIfNeeded()
+        return foundChats
+    }
+
+    func searchPublicChats(_ query: String) -> [Int64] { foundPublicChats }
+
     func searchMessages(_ query: String, offset: String, limit: Int) -> MessageSearchPage {
-        MessageSearchPage(results: [], nextOffset: "")
+        messageSearches.append("\(query)|\(offset)")
+        return messagePages.isEmpty ? MessageSearchPage(results: [], nextOffset: "") : messagePages.removeFirst()
     }
 
     private func throwIfNeeded() throws {

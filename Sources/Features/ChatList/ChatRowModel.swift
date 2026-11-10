@@ -70,7 +70,9 @@ extension ChatListState {
         return "Sans nom"
     }
 
-    private func lastMessageLine(_ message: MessagePreview, in chat: ChatSummary) -> LastMessageLine {
+    /// Message résolu (auteur, texte, état d'envoi) : dernier message d'une ligne ou résultat
+    /// de recherche.
+    func lastMessageLine(_ message: MessagePreview, in chat: ChatSummary) -> LastMessageLine {
         LastMessageLine(
             senderLabel: senderLabel(of: message, in: chat),
             text: MessageLabels.content(message.content),

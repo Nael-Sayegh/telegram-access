@@ -2,6 +2,7 @@ import XCTest
 
 /// Audits automatiques (libellés, contraste, tailles de cibles, Dynamic Type) de chaque écran
 /// de connexion, affiché par un service factice (argument `-uiTestAuthStep`, builds Debug).
+/// La liste des conversations est contrôlée par `ChatListAccessibilityTests`.
 /// Ne remplacent pas un test manuel avec VoiceOver.
 final class LaunchAccessibilityTests: XCTestCase {
     override func setUpWithError() throws {
@@ -20,34 +21,7 @@ final class LaunchAccessibilityTests: XCTestCase {
     private func audit(_ step: String, title: String) throws {
         let app = launch(step)
         XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 15), "Écran « \(title) » absent")
-        try runAudit(app)
-    }
-
-    /// Lance l'audit et signale tous les problèmes d'un coup (au lieu de s'arrêter au premier),
-    /// avec le libellé de l'élément concerné.
-    ///
-    /// Ignoré : « Dynamic Type font sizes are partially unsupported » sur des textes et boutons
-    /// SwiftUI qui utilisent tous les styles de texte système. L'audit agrandit la police, et dans
-    /// un `Form` les lignes qui sortent alors de l'écran ne sont plus mesurables : faux positif
-    /// connu, qui ne touche que les écrans assez longs. Le cas « unsupported » (police fixe)
-    /// reste vérifié.
-    @MainActor
-    private func runAudit(_ app: XCUIApplication) throws {
-        var problems: [String] = []
-        try app.performAccessibilityAudit { issue in
-            let element = issue.element.map { "« \($0.label) »" } ?? "élément inconnu"
-            let line = "\(issue.compactDescription) — \(element) — \(issue.detailedDescription)"
-            if issue.auditType == .dynamicType,
-               issue.compactDescription == "Dynamic Type font sizes are partially unsupported" {
-                print("Audit ignoré : \(line)")
-                return true
-            }
-            problems.append(line)
-            return true
-        }
-        if !problems.isEmpty {
-            XCTFail("Problèmes d'accessibilité :\n" + problems.joined(separator: "\n"))
-        }
+        try AccessibilityAudit.run(app)
     }
 
     @MainActor
@@ -81,17 +55,12 @@ final class LaunchAccessibilityTests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Mot de passe"].waitForExistence(timeout: 15))
         app.buttons["Mot de passe oublié"].tap()
         XCTAssertTrue(app.navigationBars["Récupération"].waitForExistence(timeout: 5))
-        try runAudit(app)
+        try AccessibilityAudit.run(app)
     }
 
     @MainActor
     func testRegistrationScreen() throws {
         try audit("registration", title: "Inscription")
-    }
-
-    @MainActor
-    func testHomeScreen() throws {
-        try audit("ready", title: "Discussions")
     }
 
     /// Une erreur de saisie est ajoutée au libellé du champ concerné.
