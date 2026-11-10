@@ -1,13 +1,21 @@
 import SwiftUI
 
+/// Destination de navigation depuis une liste de conversations.
+enum ChatRoute: Hashable {
+    case chat(Int64)
+    case archive
+}
+
 /// Liste principale des conversations, affichée une fois connecté.
 struct ChatListView: View {
     @Bindable var auth: AuthViewModel
     @State private var model: ChatListViewModel
     @State private var confirmsLogout = false
+    private let service: any ChatListService
 
     init(auth: AuthViewModel, store: ChatStore, service: any ChatListService) {
         self.auth = auth
+        self.service = service
         _model = State(initialValue: ChatListViewModel(list: .main, store: store, service: service))
     }
 
@@ -17,18 +25,18 @@ struct ChatListView: View {
                 Section {
                     // Pas de `Label` : l'audit Dynamic Type signale son texte comme coupé aux
                     // grandes tailles. Ici le texte passe à la ligne.
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Image(systemName: "wifi.exclamationmark")
-                            .accessibilityHidden(true)
-                        Text(connection)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .readableSecondary()
-                    .accessibilityElement(children: .combine)
+                    IconText(text: connection, systemImage: "wifi.exclamationmark")
+                        .readableSecondary()
                 }
             }
             Section {
-                rows
+                if let archive = archiveLabel {
+                    NavigationLink(value: ChatRoute.archive) {
+                        IconText(text: "Archives", systemImage: "archivebox")
+                    }
+                    .accessibilityLabel(archive)
+                }
+                ChatRows(model: model)
             } footer: {
                 AppDisclaimer()
             }
@@ -39,8 +47,13 @@ struct ChatListView: View {
         // titre passait de sous la barre (lu après Options) à dans la barre (lu avant) au
         // défilement. Titre toujours dans la barre et Options à gauche : lu en premier.
         .navigationBarTitleDisplayMode(.inline)
-        .navigationDestination(for: Int64.self) { chatId in
-            ConversationPlaceholderView(title: title(of: chatId))
+        .navigationDestination(for: ChatRoute.self) { route in
+            switch route {
+            case .chat(let chatId):
+                ConversationPlaceholderView(title: title(of: chatId))
+            case .archive:
+                ArchiveView(store: model.store, service: service)
+            }
         }
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
@@ -58,6 +71,7 @@ struct ChatListView: View {
             Button("Se déconnecter", role: .destructive) { auth.logOut() }
             Button("Annuler", role: .cancel) {}
         }
+        .chatDeletionDialog(model)
         .task { await model.loadMore() }
         .onChange(of: model.store.state.connection, initial: true) { _, status in
             model.connectionChanged(status)
@@ -67,23 +81,73 @@ struct ChatListView: View {
         }
     }
 
-    @ViewBuilder
-    private var rows: some View {
+    /// Libellé de la ligne Archives, `nil` s'il n'y a aucune conversation archivée.
+    private var archiveLabel: String? {
+        let state = model.store.state
+        let loaded = state.orderedIds[.archive]?.count ?? 0
+        let counts = state.listCounts[.archive]
+        let total = max(counts?.total ?? 0, loaded)
+        guard total > 0 else { return nil }
+        return ChatActionLabels.archiveRow(total: total, unread: counts?.unread ?? 0)
+    }
+
+    private func title(of chatId: Int64) -> String {
+        let state = model.store.state
+        return state.chats[chatId].map { state.displayTitle(of: $0) } ?? "Conversation"
+    }
+}
+
+/// Conversations archivées.
+struct ArchiveView: View {
+    @State private var model: ChatListViewModel
+
+    init(store: ChatStore, service: any ChatListService) {
+        _model = State(initialValue: ChatListViewModel(list: .archive, store: store, service: service))
+    }
+
+    var body: some View {
+        List {
+            Section {
+                ChatRows(model: model, emptyText: "Aucune conversation archivée.")
+            }
+        }
+        .listStyle(.plain)
+        .navigationTitle("Archives")
+        .navigationBarTitleDisplayMode(.inline)
+        .chatDeletionDialog(model)
+        .task { await model.loadMore() }
+    }
+}
+
+/// Lignes d'une liste de conversations : chargement, liste vide, conversations et leurs actions.
+struct ChatRows: View {
+    let model: ChatListViewModel
+    var emptyText = "Aucune conversation."
+
+    var body: some View {
         let items = model.rows
         let now = Date()
         if items.isEmpty {
             if model.isFullyLoaded {
-                Text("Aucune conversation.")
+                Text(emptyText)
                     .readableSecondary()
             } else {
                 ProgressView("Chargement des conversations…")
             }
         } else {
             ForEach(items) { row in
-                NavigationLink(value: row.id) {
+                NavigationLink(value: ChatRoute.chat(row.id)) {
                     ChatRow(row: row, now: now)
                 }
                 .chatRowAccessibility(row, now: now)
+                .accessibilityActions {
+                    ForEach(model.actions(for: row), id: \.self) { action in
+                        Button(ChatActionLabels.name(action, for: row)) {
+                            model.perform(action, on: row)
+                        }
+                    }
+                }
+                .modifier(ChatSwipeActions(row: row, model: model))
                 .onAppear { model.rowAppeared(row.id) }
             }
             if !model.isFullyLoaded {
@@ -93,10 +157,68 @@ struct ChatListView: View {
             }
         }
     }
+}
 
-    private func title(of chatId: Int64) -> String {
-        let state = model.store.state
-        return state.chats[chatId].map { state.displayTitle(of: $0) } ?? "Conversation"
+/// Actions par balayage, pour l'usage sans VoiceOver. Désactivées sous VoiceOver : SwiftUI
+/// les exposerait aussi comme actions, en doublon des actions personnalisées.
+private struct ChatSwipeActions: ViewModifier {
+    let row: ChatRowModel
+    let model: ChatListViewModel
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
+
+    func body(content: Content) -> some View {
+        if voiceOverEnabled {
+            content
+        } else {
+            let actions = model.actions(for: row)
+            content
+                .swipeActions(edge: .leading) {
+                    ForEach(actions.filter(Self.isLeading), id: \.self) { button($0) }
+                }
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    ForEach(actions.filter { !Self.isLeading($0) }.reversed(), id: \.self) { button($0) }
+                }
+        }
+    }
+
+    private static func isLeading(_ action: ChatRowAction) -> Bool {
+        switch action {
+        case .markAsRead, .markAsUnread, .pin, .unpin: return true
+        case .mute, .unmute, .archive, .unarchive, .delete: return false
+        }
+    }
+
+    private func button(_ action: ChatRowAction) -> some View {
+        Button {
+            model.perform(action, on: row)
+        } label: {
+            Label(ChatActionLabels.name(action, for: row), systemImage: Self.icon(action))
+        }
+        .tint(Self.tint(action))
+    }
+
+    private static func icon(_ action: ChatRowAction) -> String {
+        switch action {
+        case .markAsRead: return "envelope.open"
+        case .markAsUnread: return "envelope.badge"
+        case .pin: return "pin"
+        case .unpin: return "pin.slash"
+        case .mute: return "bell.slash"
+        case .unmute: return "bell"
+        case .archive: return "archivebox"
+        case .unarchive: return "tray.and.arrow.up"
+        case .delete: return "trash"
+        }
+    }
+
+    private static func tint(_ action: ChatRowAction) -> Color {
+        switch action {
+        case .delete: return Color("DestructiveColor")
+        case .markAsRead, .markAsUnread: return .accentColor
+        case .pin, .unpin: return Color(red: 0.55, green: 0.35, blue: 0.0)
+        case .mute, .unmute: return Color(red: 0.35, green: 0.35, blue: 0.40)
+        case .archive, .unarchive: return Color(red: 0.25, green: 0.30, blue: 0.45)
+        }
     }
 }
 
@@ -121,6 +243,58 @@ extension View {
                 AccessibilityCustomContentKey(Text("Type"), id: "chat.type"),
                 extra.type.map { Text(verbatim: $0) }
             )
+    }
+
+    /// Dialogue de confirmation de suppression (ou de sortie d'un groupe / d'une chaîne).
+    func chatDeletionDialog(_ model: ChatListViewModel) -> some View {
+        modifier(ChatDeletionDialogModifier(model: model))
+    }
+}
+
+private struct ChatDeletionDialogModifier: ViewModifier {
+    @Bindable var model: ChatListViewModel
+
+    func body(content: Content) -> some View {
+        let request = model.deletionRequest
+        let dialog = request.map { ChatActionLabels.deletionDialog(for: $0) }
+        content.confirmationDialog(
+            Text(dialog?.title ?? ""),
+            isPresented: Binding(
+                get: { model.deletionRequest != nil },
+                set: { if !$0 { model.deletionRequest = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: request
+        ) { row in
+            if let dialog {
+                Button(dialog.confirm, role: .destructive) {
+                    model.confirmDeletion(of: row, forEveryone: false)
+                }
+                if let forEveryone = dialog.confirmForEveryone {
+                    Button(forEveryone, role: .destructive) {
+                        model.confirmDeletion(of: row, forEveryone: true)
+                    }
+                }
+            }
+            Button("Annuler", role: .cancel) {}
+        }
+    }
+}
+
+/// Icône décorative suivie d'un texte qui passe à la ligne aux grandes tailles (contrairement
+/// à `Label`, signalé comme coupé par l'audit Dynamic Type).
+struct IconText: View {
+    let text: String
+    let systemImage: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: systemImage)
+                .accessibilityHidden(true)
+            Text(text)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 

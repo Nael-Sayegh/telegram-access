@@ -17,6 +17,8 @@ struct ChatListState {
     private(set) var connection: ConnectionStatus = .connecting
     /// Identifiants des conversations de chaque liste, dans l'ordre d'affichage.
     private(set) var orderedIds: [ChatListKind: [Int64]] = [:]
+    /// Compteurs envoyés par TDLib pour chaque liste (y compris non chargée, comme les archives).
+    private(set) var listCounts: [ChatListKind: ChatListCounts] = [:]
 
     // MARK: - Lecture
 
@@ -87,6 +89,8 @@ struct ChatListState {
             myUserId = id
         case .connection(let status):
             connection = status
+        case .listCounts(let list, let total, let unread):
+            listCounts[list] = ChatListCounts(total: total, unread: unread)
         }
     }
 

@@ -215,6 +215,14 @@ enum ChatListEvent: Equatable {
     case user(id: Int64, name: UserName)
     case myUserId(Int64)
     case connection(ConnectionStatus)
+    /// Nombre de conversations d'une liste et nombre de conversations non lues.
+    case listCounts(list: ChatListKind, total: Int, unread: Int)
+}
+
+/// Compteurs d'une liste de conversations, connus avant son chargement.
+struct ChatListCounts: Equatable {
+    var total: Int
+    var unread: Int
 }
 
 /// Résultat d'une recherche de messages, toutes conversations confondues.

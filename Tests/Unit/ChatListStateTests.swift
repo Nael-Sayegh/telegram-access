@@ -196,6 +196,13 @@ final class ChatListStateTests: XCTestCase {
         XCTAssertEqual(UserName(firstName: "Marie", lastName: "", isDeleted: true).displayName, "Compte supprimé")
     }
 
+    func testListCounts() {
+        var state = ChatListState()
+        state.apply(.listCounts(list: .archive, total: 12, unread: 3))
+        XCTAssertEqual(state.listCounts[.archive], ChatListCounts(total: 12, unread: 3))
+        XCTAssertNil(state.listCounts[.main])
+    }
+
     func testConnectionStatus() {
         var state = ChatListState()
         XCTAssertEqual(state.connection, .connecting)

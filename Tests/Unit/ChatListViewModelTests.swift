@@ -49,6 +49,68 @@ final class ChatListViewModelTests: XCTestCase {
         await waitUntil { model.rows.map(\.title) == ["Récente", "Ancienne"] }
     }
 
+    // MARK: - Actions
+
+    /// Modèle avec une conversation (id 1) chargée.
+    private func modelWithChat(_ chat: ChatSummary = ChatTestData.chat(1)) async -> (ChatListViewModel, FakeAuthService) {
+        let (model, service) = await makeModel()
+        service.send(.newChat(chat))
+        await waitUntil { model.rows.count == 1 }
+        return (model, service)
+    }
+
+    private func waitForCalls(_ service: FakeAuthService, count: Int = 1) async -> [String] {
+        for _ in 0..<200 {
+            let calls = await service.chatCalls
+            if calls.count >= count { return calls }
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        return await service.chatCalls
+    }
+
+    func testPinCallsServiceAndAnnouncesResult() async {
+        let (model, service) = await modelWithChat()
+        model.perform(.pin, on: model.rows[0])
+        let calls = await waitForCalls(service)
+        XCTAssertEqual(calls, ["pin 1 main true"])
+        await waitUntil { model.lastAnnouncement == "Conversation épinglée." }
+    }
+
+    func testArchiveAndMuteActions() async {
+        let (model, service) = await modelWithChat()
+        model.perform(.archive, on: model.rows[0])
+        model.perform(.mute, on: model.rows[0])  // ignorée : action déjà en cours sur la conversation
+        _ = await waitForCalls(service)
+        await waitUntil { model.lastAnnouncement == "Conversation archivée." }
+        model.perform(.mute, on: model.rows[0])
+        let calls = await waitForCalls(service, count: 2)
+        XCTAssertEqual(calls, ["move 1 archive", "mute 1 true"])
+    }
+
+    func testFailedActionAnnouncesError() async {
+        let (model, service) = await modelWithChat()
+        await service.failNextCall(with: TelegramError(code: 400, message: "The maximum number of pinned chats exceeded"))
+        model.perform(.pin, on: model.rows[0])
+        await waitUntil {
+            model.lastAnnouncement == "Nombre maximal de conversations épinglées atteint. Désépinglez-en une d'abord."
+        }
+    }
+
+    func testDeleteAsksForConfirmationFirst() async {
+        let (model, service) = await modelWithChat()
+        let row = model.rows[0]
+        model.perform(.delete, on: row)
+        XCTAssertEqual(model.deletionRequest, row)
+        let before = await service.chatCalls
+        XCTAssertEqual(before, [])
+
+        model.confirmDeletion(of: row, forEveryone: true)
+        XCTAssertNil(model.deletionRequest)
+        let calls = await waitForCalls(service)
+        XCTAssertEqual(calls, ["delete 1 true"])
+        await waitUntil { model.lastAnnouncement == "Conversation supprimée." }
+    }
+
     func testLastRowsTriggerLoading() async {
         let (model, service) = await makeModel(pages: 5)
         service.send(.newChat(ChatTestData.chat(1, order: 10)))

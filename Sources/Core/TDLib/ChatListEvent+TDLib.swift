@@ -53,6 +53,8 @@ extension ChatListEvent {
             self = .myUserId(id.value.rawValue)
         case .updateConnectionState(let value):
             self = .connection(ConnectionStatus(value.state))
+        case .updateUnreadChatCount(let value):
+            self = .listCounts(list: ChatListKind(value.chatList), total: value.totalCount, unread: value.unreadCount)
         default:
             return nil
         }

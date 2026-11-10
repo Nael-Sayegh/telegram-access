@@ -22,6 +22,11 @@ struct ChatRowModel: Identifiable, Equatable {
     var isMuted: Bool
     var draft: DraftSummary?
     var lastMessage: LastMessageLine?
+    /// Messages, mentions ou réactions non lus, ou marque « non lu ».
+    var hasUnread: Bool = false
+    var isSavedMessages: Bool = false
+    /// Vrai si l'historique peut aussi être supprimé chez l'interlocuteur.
+    var canDeleteForEveryone: Bool = false
 
     var isSecret: Bool {
         if case .secret = kind { return true }
@@ -42,7 +47,10 @@ extension ChatListState {
             isPinned: chat.position(in: list)?.isPinned ?? false,
             isMuted: isMuted(chat),
             draft: chat.draft,
-            lastMessage: chat.lastMessage.map { lastMessageLine($0, in: chat) }
+            lastMessage: chat.lastMessage.map { lastMessageLine($0, in: chat) },
+            hasUnread: chat.hasUnread,
+            isSavedMessages: isSavedMessages(chat),
+            canDeleteForEveryone: chat.canBeDeletedForAllUsers
         )
     }
 

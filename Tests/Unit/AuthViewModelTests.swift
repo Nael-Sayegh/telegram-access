@@ -91,12 +91,38 @@ actor FakeAuthService: TelegramService {
         return true
     }
 
-    func markAsRead(_ chat: ChatSummary) {}
-    func setMarkedAsUnread(chatId: Int64, _ isMarkedAsUnread: Bool) {}
-    func setPinned(chatId: Int64, in list: ChatListKind, _ isPinned: Bool) {}
-    func setMuted(chatId: Int64, _ isMuted: Bool) {}
-    func moveChat(chatId: Int64, to list: ChatListKind) {}
-    func deleteChat(_ chat: ChatSummary, forEveryone: Bool) {}
+    /// Actions reçues sur les conversations, ex. « pin 1 main true ».
+    private(set) var chatCalls: [String] = []
+
+    func markAsRead(_ chat: ChatSummary) throws {
+        try throwIfNeeded()
+        chatCalls.append("read \(chat.id)")
+    }
+
+    func setMarkedAsUnread(chatId: Int64, _ isMarkedAsUnread: Bool) throws {
+        try throwIfNeeded()
+        chatCalls.append("unread \(chatId) \(isMarkedAsUnread)")
+    }
+
+    func setPinned(chatId: Int64, in list: ChatListKind, _ isPinned: Bool) throws {
+        try throwIfNeeded()
+        chatCalls.append("pin \(chatId) \(list) \(isPinned)")
+    }
+
+    func setMuted(chatId: Int64, _ isMuted: Bool) throws {
+        try throwIfNeeded()
+        chatCalls.append("mute \(chatId) \(isMuted)")
+    }
+
+    func moveChat(chatId: Int64, to list: ChatListKind) throws {
+        try throwIfNeeded()
+        chatCalls.append("move \(chatId) \(list)")
+    }
+
+    func deleteChat(_ chat: ChatSummary, forEveryone: Bool) throws {
+        try throwIfNeeded()
+        chatCalls.append("delete \(chat.id) \(forEveryone)")
+    }
     func searchChats(_ query: String, limit: Int) -> [Int64] { [] }
     func searchPublicChats(_ query: String) -> [Int64] { [] }
     func searchMessages(_ query: String, offset: String, limit: Int) -> MessageSearchPage {
