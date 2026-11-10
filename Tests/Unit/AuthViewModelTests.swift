@@ -75,7 +75,22 @@ actor FakeAuthService: TelegramService {
     func countries() -> [Country] { [] }
     func estimatedCountryCode() -> String { "FR" }
 
-    func loadChats(_ list: ChatListKind, limit: Int) -> Bool { false }
+    private(set) var loadChatsCalls: [ChatListKind] = []
+    /// Pages restant à charger avant que `loadChats` signale la fin de la liste.
+    private var pagesLeft = 0
+
+    func setPagesLeft(_ count: Int) {
+        pagesLeft = count
+    }
+
+    func loadChats(_ list: ChatListKind, limit: Int) throws -> Bool {
+        try throwIfNeeded()
+        loadChatsCalls.append(list)
+        guard pagesLeft > 0 else { return false }
+        pagesLeft -= 1
+        return true
+    }
+
     func markAsRead(_ chat: ChatSummary) {}
     func setMarkedAsUnread(chatId: Int64, _ isMarkedAsUnread: Bool) {}
     func setPinned(chatId: Int64, in list: ChatListKind, _ isPinned: Bool) {}
