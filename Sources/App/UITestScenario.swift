@@ -56,8 +56,10 @@ enum UITestScenario: String, CaseIterable {
 }
 
 /// Service factice : envoie l'étape demandée et accepte toutes les actions, sans réseau.
-actor UITestAuthService: AuthService {
+/// Liste des conversations vide pour l'instant (scénarios de conversations : lot 5).
+actor UITestAuthService: TelegramService {
     nonisolated let steps: AsyncStream<AuthStep>
+    nonisolated let chatEvents: AsyncStream<ChatListEvent>
     private let continuation: AsyncStream<AuthStep>.Continuation
     private let scenario: UITestScenario
 
@@ -65,6 +67,7 @@ actor UITestAuthService: AuthService {
         let stream = AsyncStream.makeStream(of: AuthStep.self)
         self.steps = stream.stream
         self.continuation = stream.continuation
+        self.chatEvents = AsyncStream.makeStream(of: ChatListEvent.self).stream
         self.scenario = scenario
     }
 
@@ -94,6 +97,19 @@ actor UITestAuthService: AuthService {
 
     func estimatedCountryCode() -> String {
         "FR"
+    }
+
+    func loadChats(_ list: ChatListKind, limit: Int) -> Bool { false }
+    func markAsRead(_ chat: ChatSummary) {}
+    func setMarkedAsUnread(chatId: Int64, _ isMarkedAsUnread: Bool) {}
+    func setPinned(chatId: Int64, in list: ChatListKind, _ isPinned: Bool) {}
+    func setMuted(chatId: Int64, _ isMuted: Bool) {}
+    func moveChat(chatId: Int64, to list: ChatListKind) {}
+    func deleteChat(_ chat: ChatSummary, forEveryone: Bool) {}
+    func searchChats(_ query: String, limit: Int) -> [Int64] { [] }
+    func searchPublicChats(_ query: String) -> [Int64] { [] }
+    func searchMessages(_ query: String, offset: String, limit: Int) -> MessageSearchPage {
+        MessageSearchPage(results: [], nextOffset: "")
     }
 }
 #endif

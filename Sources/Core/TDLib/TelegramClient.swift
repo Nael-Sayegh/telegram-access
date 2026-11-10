@@ -32,12 +32,15 @@ enum TDLibRuntime {
     }
 }
 
-/// Enveloppe d'un client TDLib. Seul point de l'app qui importe TDLibKit pour l'authentification.
+/// Enveloppe d'un client TDLib. Seul point de l'app qui importe TDLibKit (avec les conversions
+/// `AuthStep+TDLib` et `ChatListEvent+TDLib`).
 /// Un client fermé (`authorizationStateClosed`, après déconnexion) ne peut pas être réutilisé :
 /// il faut en créer un nouveau.
 actor TelegramClient: AuthService {
     /// Étapes d'authentification, dans l'ordre reçu de TDLib.
     nonisolated let steps: AsyncStream<AuthStep>
+    /// Changements de la liste des conversations, émis dès la création du client.
+    nonisolated let chatEvents: AsyncStream<ChatListEvent>
 
     private let stepContinuation: AsyncStream<AuthStep>.Continuation
     private let rawStates: AsyncStream<AuthorizationState>
@@ -63,13 +66,20 @@ actor TelegramClient: AuthService {
         self.rawStates = rawStream.stream
         let rawContinuation = rawStream.continuation
 
+        let chatStream = AsyncStream.makeStream(of: ChatListEvent.self)
+        self.chatEvents = chatStream.stream
+        let chatContinuation = chatStream.continuation
+
         self.client = manager.createClient { data, client in
             guard let update = try? client.decoder.decode(Update.self, from: data) else { return }
             if case .updateAuthorizationState(let value) = update {
                 rawContinuation.yield(value.authorizationState)
                 if case .authorizationStateClosed = value.authorizationState {
                     rawContinuation.finish()
+                    chatContinuation.finish()
                 }
+            } else if let event = ChatListEvent(update) {
+                chatContinuation.yield(event)
             }
         }
         TDLibRuntime.configureLogging(using: self.client)
@@ -231,7 +241,8 @@ actor TelegramClient: AuthService {
         try? DatabaseKeyStore.deleteKey()
     }
 
-    private func run<T>(_ body: (TDLibClient) async throws -> T) async throws -> T {
+    /// Exécute une requête TDLib ; les erreurs deviennent des `TelegramError`.
+    func run<T>(_ body: (TDLibClient) async throws -> T) async throws -> T {
         do {
             return try await body(client)
         } catch let error as TDLibKit.Error {

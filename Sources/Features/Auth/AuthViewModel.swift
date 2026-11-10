@@ -22,16 +22,22 @@ final class AuthViewModel {
     /// Vrai une fois un code de récupération du mot de passe demandé (écran de récupération).
     private(set) var isRecoveringPassword = false
 
+    /// Conversations du client courant. Créé avec le client (TDLib n'envoie chaque conversation
+    /// qu'une fois), remplacé avec lui après une déconnexion.
+    private(set) var chats: ChatStore?
+    /// Service du client courant, pour les opérations sur les conversations.
+    var chatService: (any ChatListService)? { service }
+
     private let config: AppConfig?
-    private let makeService: (AppConfig) -> any AuthService
-    private var service: (any AuthService)?
+    private let makeService: (AppConfig) -> any TelegramService
+    private var service: (any TelegramService)?
     private var listenTask: Task<Void, Never>?
     /// Vrai pendant un retour volontaire à la saisie du numéro depuis une étape ultérieure.
     private var isEditingPhoneNumber = false
 
     init(
         config: AppConfig?,
-        makeService: @escaping (AppConfig) -> any AuthService = { TelegramClient(config: $0) }
+        makeService: @escaping (AppConfig) -> any TelegramService = { TelegramClient(config: $0) }
     ) {
         self.config = config
         self.makeService = makeService
@@ -44,6 +50,7 @@ final class AuthViewModel {
         guard service == nil, let config else { return }
         let service = makeService(config)
         self.service = service
+        chats = ChatStore(events: service.chatEvents)
         listenTask = Task { [weak self] in
             await service.start()
             for await step in service.steps {
@@ -68,6 +75,7 @@ final class AuthViewModel {
         listenTask?.cancel()
         listenTask = nil
         service = nil
+        chats = nil
         isRecoveringPassword = false
         step = .starting
         start()
