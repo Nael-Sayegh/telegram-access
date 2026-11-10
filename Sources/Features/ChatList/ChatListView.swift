@@ -4,13 +4,13 @@ import SwiftUI
 enum ChatRoute: Hashable {
     case chat(Int64)
     case archive
+    case search
 }
 
 /// Liste principale des conversations, affichée une fois connecté.
 struct ChatListView: View {
     @Bindable var auth: AuthViewModel
     @State private var model: ChatListViewModel
-    @State private var search: GlobalSearchViewModel
     @State private var confirmsLogout = false
     @Namespace private var rotorNamespace
     private let service: any ChatListService
@@ -19,42 +19,37 @@ struct ChatListView: View {
         self.auth = auth
         self.service = service
         _model = State(initialValue: ChatListViewModel(list: .main, store: store, service: service))
-        _search = State(initialValue: GlobalSearchViewModel(store: store, service: service))
     }
 
     var body: some View {
         List {
-            if search.isActive {
-                SearchResults(search: search)
-            } else {
-                listSections
-            }
+            listSections
         }
         .listStyle(.plain)
         .chatRotors(model, namespace: rotorNamespace)
         .navigationTitle("Discussions")
-        // Ordre VoiceOver constant : « Options », « Discussions », puis le champ de recherche.
-        // Avec un grand titre, le titre passait de sous la barre (lu après Options) à dans la
-        // barre (lu avant) au défilement. Titre toujours dans la barre, Options à gauche, champ
-        // de recherche toujours affiché.
+        // Ordre VoiceOver constant : Options, Discussions, Rechercher, Filtre. Titre toujours
+        // dans la barre : un grand titre passait de sous la barre (lu après Options) à dans la
+        // barre (lu avant) au défilement. Pas de champ `.searchable` : iOS 26 le place en bas
+        // de l'écran, lu en dernier ; un bouton ouvre l'écran de recherche.
         .navigationBarTitleDisplayMode(.inline)
-        .searchable(
-            text: $search.query,
-            placement: .navigationBarDrawer(displayMode: .always),
-            // Court : un texte indicatif long serait coupé dans le champ.
-            prompt: "Rechercher"
-        )
-        .onChange(of: search.query) { search.queryChanged() }
-        .onSubmit(of: .search) { search.submit() }
         .navigationDestination(for: ChatRoute.self) { route in
             switch route {
             case .chat(let chatId):
                 ConversationPlaceholderView(title: title(of: chatId))
             case .archive:
                 ArchiveView(store: model.store, service: service)
+            case .search:
+                GlobalSearchView(store: model.store, service: service)
             }
         }
         .toolbar {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                NavigationLink(value: ChatRoute.search) {
+                    Label("Rechercher", systemImage: "magnifyingglass")
+                }
+                filterMenu
+            }
             ToolbarItem(placement: .topBarLeading) {
                 Menu {
                     // Mention « client non officiel » ici plutôt qu'en bas de la liste : en pied
@@ -85,10 +80,35 @@ struct ChatListView: View {
         }
     }
 
+    /// Menu de choix du filtre. VoiceOver : « Filtre : Non lus », puis dans le menu chaque
+    /// filtre avec son nombre de conversations, le filtre actif annoncé « sélectionné ».
+    private var filterMenu: some View {
+        Menu {
+            Picker("Filtre", selection: Binding(get: { model.filter }, set: { model.select($0) })) {
+                ForEach(ChatFilter.allCases, id: \.self) { filter in
+                    Text(filter.menuTitle(count: model.count(for: filter))).tag(filter)
+                }
+            }
+        } label: {
+            Label(
+                "Filtre",
+                systemImage: model.filter == .all
+                    ? "line.3.horizontal.decrease.circle"
+                    : "line.3.horizontal.decrease.circle.fill"
+            )
+        }
+        .accessibilityLabel(model.filter.buttonLabel)
+    }
+
     @ViewBuilder
     private var listSections: some View {
-        Section {
-            ChatFilterBar(model: model)
+        if model.filter != .all {
+            Section {
+                // Rappel visible du filtre actif (VoiceOver : déjà dans le bouton Filtre).
+                Button("Filtre : \(model.filter.name). Tout afficher") {
+                    model.select(.all)
+                }
+            }
         }
         if let connection = model.connectionText {
             Section {

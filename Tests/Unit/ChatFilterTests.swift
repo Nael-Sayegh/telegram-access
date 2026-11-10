@@ -33,9 +33,9 @@ final class ChatFilterTests: XCTestCase {
     }
 
     func testLabels() {
-        XCTAssertEqual(ChatFilter.unread.accessibilityLabel(count: 4), "Non lus, 4 conversations")
-        XCTAssertEqual(ChatFilter.channels.accessibilityLabel(count: 1), "Chaînes, 1 conversation")
-        XCTAssertEqual(ChatFilter.all.accessibilityLabel(count: nil), "Tous")
+        XCTAssertEqual(ChatFilter.unread.menuTitle(count: 4), "Non lus (4)")
+        XCTAssertEqual(ChatFilter.all.menuTitle(count: nil), "Tous")
+        XCTAssertEqual(ChatFilter.channels.buttonLabel, "Filtre : Chaînes")
         XCTAssertEqual(ChatFilter.resultAnnouncement(count: 0), "Aucune conversation.")
         XCTAssertEqual(ChatFilter.resultAnnouncement(count: 3), "3 conversations.")
         XCTAssertEqual(ChatFilter.unread.emptyText, "Aucune conversation non lue.")

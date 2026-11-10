@@ -11,13 +11,43 @@ struct SearchMessageRow: Identifiable, Equatable {
     var line: LastMessageLine
 }
 
-/// Recherche globale : conversations connues (appareil puis serveur), groupes et chaînes
-/// publics, messages de toutes les conversations.
+/// Ce que porte la recherche.
+enum SearchScope: CaseIterable, Hashable {
+    /// Texte des messages de toutes les conversations (par défaut).
+    case messages
+    /// Conversations connues (appareil puis serveur), groupes et chaînes publics.
+    case conversations
+
+    var name: String {
+        switch self {
+        case .messages: return "Messages"
+        case .conversations: return "Conversations"
+        }
+    }
+
+    /// Libellé du champ de recherche (lu par VoiceOver, affiché tant que le champ est vide).
+    var prompt: String {
+        switch self {
+        case .messages: return "Rechercher dans les messages"
+        case .conversations: return "Rechercher une conversation"
+        }
+    }
+
+    func noResult(_ query: String) -> String {
+        switch self {
+        case .messages: return "Aucun message trouvé pour « \(query) »."
+        case .conversations: return "Aucune conversation trouvée pour « \(query) »."
+        }
+    }
+}
+
+/// Recherche globale, dans les messages ou parmi les conversations (`SearchScope`).
 @MainActor
 @Observable
 final class GlobalSearchViewModel {
     /// Texte saisi ; la vue appelle `queryChanged()` à chaque modification.
     var query = ""
+    private(set) var scope: SearchScope = .messages
 
     private(set) var chatIds: [Int64] = []
     private(set) var publicChatIds: [Int64] = []
@@ -85,22 +115,37 @@ final class GlobalSearchViewModel {
         searchTask = Task { [weak self] in await self?.search(text) }
     }
 
-    private func search(_ text: String) async {
-        let service = service
-        async let chats = try? service.searchChats(text, limit: Self.chatLimit)
-        async let publicChats = try? service.searchPublicChats(text)
-        async let page = try? service.searchMessages(text, offset: "", limit: Self.messagePageSize)
-        let (foundChats, foundPublic, foundPage) = await (chats, publicChats, page)
+    /// Change la portée ; une recherche en cours est relancée aussitôt.
+    func setScope(_ newScope: SearchScope) {
+        guard newScope != scope else { return }
+        scope = newScope
+        reset()
+        submit()
+    }
 
-        // Une nouvelle saisie a remplacé cette recherche.
-        guard !Task.isCancelled, text == trimmedQuery else { return }
-        isSearching = false
-        failed = foundChats == nil && foundPage == nil
-        chatIds = foundChats ?? []
-        publicChatIds = foundPublic ?? []
-        messages = (foundPage?.results ?? []).compactMap(makeRow)
-        nextOffset = foundPage?.nextOffset ?? ""
-        hasMoreMessages = !nextOffset.isEmpty
+    private func search(_ text: String) async {
+        let scope = scope
+        switch scope {
+        case .messages:
+            let page = try? await service.searchMessages(text, offset: "", limit: Self.messagePageSize)
+            // Une nouvelle saisie (ou portée) a remplacé cette recherche.
+            guard !Task.isCancelled, text == trimmedQuery, scope == self.scope else { return }
+            reset()
+            failed = page == nil
+            messages = (page?.results ?? []).compactMap(makeRow)
+            nextOffset = page?.nextOffset ?? ""
+            hasMoreMessages = !nextOffset.isEmpty
+        case .conversations:
+            let service = service
+            async let chats = try? service.searchChats(text, limit: Self.chatLimit)
+            async let publicChats = try? service.searchPublicChats(text)
+            let (foundChats, foundPublic) = await (chats, publicChats)
+            guard !Task.isCancelled, text == trimmedQuery, scope == self.scope else { return }
+            reset()
+            failed = foundChats == nil && foundPublic == nil
+            chatIds = foundChats ?? []
+            publicChatIds = foundPublic ?? []
+        }
 
         announce(failed
             ? "La recherche a échoué. Vérifiez votre connexion."
@@ -114,7 +159,7 @@ final class GlobalSearchViewModel {
     /// Page suivante de messages.
     func loadMoreMessages() async {
         let text = trimmedQuery
-        guard hasMoreMessages, !isSearching, !text.isEmpty else { return }
+        guard scope == .messages, hasMoreMessages, !isSearching, !text.isEmpty else { return }
         isSearching = true
         defer { isSearching = false }
         do {

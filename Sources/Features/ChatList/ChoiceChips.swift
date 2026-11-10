@@ -1,30 +1,34 @@
 import SwiftUI
 
-/// Filtres de la liste principale. Boutons sur plusieurs lignes si nécessaire plutôt qu'un
-/// contrôle segmenté, dont les libellés seraient coupés aux grandes tailles de texte.
-/// VoiceOver : groupe « Filtres », puis « Non lus, 4 conversations, sélectionné, bouton ».
-struct ChatFilterBar: View {
-    let model: ChatListViewModel
+/// Choix exclusif entre quelques options (ex. Messages / Conversations). Boutons sur plusieurs
+/// lignes si nécessaire plutôt qu'un contrôle segmenté, dont les libellés seraient coupés aux
+/// grandes tailles de texte. VoiceOver : groupe `label`, puis « Messages, sélectionné, bouton ».
+struct ChoiceChips<Option: Hashable>: View {
+    let label: String
+    let options: [Option]
+    let selection: Option
+    let title: (Option) -> String
+    let select: (Option) -> Void
 
     var body: some View {
         FlowLayout(spacing: 8) {
-            ForEach(ChatFilter.allCases, id: \.self) { filter in
-                FilterButton(
-                    title: filter.name,
-                    accessibilityLabel: filter.accessibilityLabel(count: model.count(for: filter)),
-                    isSelected: model.filter == filter
+            ForEach(options, id: \.self) { option in
+                ChoiceChip(
+                    title: title(option),
+                    accessibilityLabel: title(option),
+                    isSelected: option == selection
                 ) {
-                    model.select(filter)
+                    select(option)
                 }
             }
         }
         .padding(.vertical, 4)
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Filtres")
+        .accessibilityLabel(label)
     }
 }
 
-private struct FilterButton: View {
+private struct ChoiceChip: View {
     let title: String
     let accessibilityLabel: String
     let isSelected: Bool

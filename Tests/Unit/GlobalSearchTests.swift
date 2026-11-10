@@ -55,19 +55,34 @@ final class GlobalSearchViewModelTests: XCTestCase {
         )
     }
 
-    func testResultsAreGroupedAndAnnounced() async {
+    func testMessagesScopeIsTheDefaultAndSearchesOnlyMessages() async {
         let (search, service) = await makeSearch()
-        await service.setSearchResults(chats: [1], publicChats: [1, 2], messagePages: [page([10, 11], next: "p2")])
+        await service.setSearchResults(chats: [1], messagePages: [page([10, 11], next: "p2")])
+        XCTAssertEqual(search.scope, .messages)
 
         search.query = "bon"
         search.submit()
         await waitUntil { search.lastAnnouncement != nil }
 
+        XCTAssertEqual(search.messages.map(\.messageId), [10, 11])
+        XCTAssertTrue(search.chatRows.isEmpty, "Les conversations ne sont pas cherchées")
+        XCTAssertTrue(search.hasMoreMessages)
+        XCTAssertEqual(search.lastAnnouncement, "2 messages ou plus.")
+    }
+
+    func testConversationsScopeGroupsKnownAndPublicChats() async {
+        let (search, service) = await makeSearch()
+        await service.setSearchResults(chats: [1], publicChats: [1, 2], messagePages: [page([10], next: "")])
+        search.query = "bon"
+        search.setScope(.conversations)
+        await waitUntil { search.lastAnnouncement != nil }
+
         XCTAssertEqual(search.chatRows.map(\.title), ["Marie Dupont"])
         XCTAssertEqual(search.publicChatRows.map(\.title), ["Infos"], "Sans doublon avec les conversations connues")
-        XCTAssertEqual(search.messages.map(\.messageId), [10, 11])
-        XCTAssertTrue(search.hasMoreMessages)
-        XCTAssertEqual(search.lastAnnouncement, "2 conversations, 2 messages ou plus.")
+        XCTAssertTrue(search.messages.isEmpty, "Les messages ne sont pas cherchés")
+        XCTAssertEqual(search.lastAnnouncement, "2 conversations.")
+        let searches = await service.messageSearches
+        XCTAssertEqual(searches, [])
     }
 
     func testMoreMessagesUseNextOffset() async {
@@ -87,20 +102,20 @@ final class GlobalSearchViewModelTests: XCTestCase {
 
     func testTypingIsDebouncedAndClearingResets() async {
         let (search, service) = await makeSearch()
-        await service.setSearchResults(chats: [1])
+        await service.setSearchResults(chats: [], messagePages: [page([10], next: "")])
         for text in ["m", "ma", "mar"] {
             search.query = text
             search.queryChanged()
         }
         XCTAssertTrue(search.isSearching)
-        await waitUntil { !search.chatRows.isEmpty }
+        await waitUntil { !search.messages.isEmpty }
         let searches = await service.messageSearches
         XCTAssertEqual(searches, ["mar|"], "Une seule recherche après la pause de frappe")
 
         search.query = "  "
         search.queryChanged()
         XCTAssertFalse(search.isActive)
-        XCTAssertTrue(search.chatRows.isEmpty)
+        XCTAssertTrue(search.messages.isEmpty)
     }
 
     func testNoResult() async {
@@ -109,16 +124,18 @@ final class GlobalSearchViewModelTests: XCTestCase {
         search.submit()
         await waitUntil { search.lastAnnouncement == "Aucun résultat." }
         XCTAssertFalse(search.failed)
+        XCTAssertEqual(search.scope.noResult("zzz"), "Aucun message trouvé pour « zzz ».")
     }
 
     func testPartialFailureIsNotAGlobalFailure() async {
         let (search, service) = await makeSearch()
         await service.failNextCall(with: TelegramError(code: 500, message: "NETWORK"))
         search.query = "bon"
-        search.submit()
+        search.setScope(.conversations)
         await waitUntil { search.lastAnnouncement != nil }
-        // Les conversations ont échoué mais la recherche de messages a répondu (vide) :
+        // Les conversations connues ont échoué mais la recherche publique a répondu (vide) :
         // pas d'échec global, simplement aucun résultat.
+        XCTAssertFalse(search.failed)
         XCTAssertEqual(search.lastAnnouncement, "Aucun résultat.")
     }
 }

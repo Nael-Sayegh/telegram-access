@@ -72,11 +72,16 @@ enum ChatFilter: CaseIterable, Hashable {
         }
     }
 
-    /// Libellé VoiceOver du bouton : « Non lus, 4 conversations ». Nombre omis tant qu'il
-    /// n'est pas connu (liste pas encore entièrement chargée).
-    func accessibilityLabel(count: Int?) -> String {
+    /// Libellé du bouton Filtre de la barre : « Filtre : Non lus ».
+    var buttonLabel: String {
+        "Filtre : \(name)"
+    }
+
+    /// Option du menu Filtre : « Non lus (4) ». Nombre omis tant qu'il n'est pas connu
+    /// (liste pas encore entièrement chargée).
+    func menuTitle(count: Int?) -> String {
         guard let count else { return name }
-        return "\(name), \(Self.conversations(count))"
+        return "\(name) (\(count))"
     }
 
     /// Annonce après le choix d'un filtre : « 4 conversations », « Aucune conversation ».

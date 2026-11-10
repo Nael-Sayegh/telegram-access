@@ -42,17 +42,35 @@ final class ChatListAccessibilityTests: XCTestCase {
         try AccessibilityAudit.run(app)
     }
 
+    /// Ordre de la barre du haut pour VoiceOver : Options, Discussions, Rechercher, Filtre.
+    @MainActor
+    func testTopBarOrder() throws {
+        let app = launchList()
+        let bar = app.navigationBars["Discussions"]
+        let labels = bar.descendants(matching: .any)
+            .allElementsBoundByIndex
+            .map(\.label)
+            .filter { ["Options", "Discussions", "Rechercher", "Filtre : Tous"].contains($0) }
+        var seen: [String] = []
+        for label in labels where !seen.contains(label) { seen.append(label) }
+        XCTAssertEqual(seen, ["Options", "Discussions", "Rechercher", "Filtre : Tous"])
+    }
+
     @MainActor
     func testUnreadFilter() throws {
         let app = launchList()
-        // Non lus : Marie, Famille et la conversation secrète marquée « non lue ».
-        let unread = app.buttons["Non lus, 3 conversations"]
-        XCTAssertTrue(unread.waitForExistence(timeout: 5))
         let paulRow = element(app, "Paul Martin, dernier message : Merci, hier")
-        XCTAssertTrue(paulRow.exists)
+        XCTAssertTrue(paulRow.waitForExistence(timeout: 5))
 
+        let filter = app.buttons["Filtre : Tous"]
+        XCTAssertTrue(filter.exists)
+        filter.tap()
+        // Non lus : Marie, Famille et la conversation secrète marquée « non lue ».
+        let unread = app.buttons["Non lus (3)"]
+        XCTAssertTrue(unread.waitForExistence(timeout: 5), "Option du menu Filtre absente")
         unread.tap()
-        XCTAssertTrue(unread.isSelected)
+
+        XCTAssertTrue(app.buttons["Filtre : Non lus"].waitForExistence(timeout: 5))
         XCTAssertTrue(element(app, Self.marieRow).exists)
         XCTAssertFalse(paulRow.exists, "Conversation lue masquée par le filtre")
     }
@@ -68,16 +86,24 @@ final class ChatListAccessibilityTests: XCTestCase {
         try AccessibilityAudit.run(app)
     }
 
+    /// Recherche dans les messages (par défaut), puis parmi les conversations.
     @MainActor
     func testSearchScreen() throws {
         let app = launchList()
-        let field = app.searchFields.firstMatch
+        app.buttons["Rechercher"].tap()
+        XCTAssertTrue(app.navigationBars["Rechercher"].waitForExistence(timeout: 5))
+
+        let field = app.textFields["Rechercher dans les messages"]
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         field.tap()
-        field.typeText("Marie\n")
-        XCTAssertTrue(app.staticTexts["Conversations"].waitForExistence(timeout: 5), "Résultats absents")
-        XCTAssertTrue(element(app, Self.marieRow).exists)
+        field.typeText("demain\n")
+        let message = element(app, "Marie Dupont, On se voit demain ?, 9 h 05")
+        XCTAssertTrue(message.waitForExistence(timeout: 5), "Message trouvé absent")
         try AccessibilityAudit.run(app)
+
+        app.buttons["Conversations"].tap()
+        XCTAssertTrue(app.staticTexts["Aucune conversation trouvée pour « demain »."].waitForExistence(timeout: 5))
+        XCTAssertFalse(message.exists)
     }
 
     /// Sans VoiceOver, la suppression passe par le balayage et demande confirmation.
