@@ -15,8 +15,16 @@ struct ChatListView: View {
         List {
             if let connection = model.connectionText {
                 Section {
-                    Label(connection, systemImage: "wifi.exclamationmark")
-                        .readableSecondary()
+                    // Pas de `Label` : l'audit Dynamic Type signale son texte comme coupé aux
+                    // grandes tailles. Ici le texte passe à la ligne.
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Image(systemName: "wifi.exclamationmark")
+                            .accessibilityHidden(true)
+                        Text(connection)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .readableSecondary()
+                    .accessibilityElement(children: .combine)
                 }
             }
             Section {
