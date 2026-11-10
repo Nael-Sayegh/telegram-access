@@ -96,9 +96,19 @@ extension View {
         let extra = ChatListLabels.customContent(row)
         return self
             .accessibilityLabel(ChatListLabels.row(row, now: now, calendar: .current))
-            .accessibilityCustomContent(Text("État"), extra.state.map { Text(verbatim: $0) })
-            .accessibilityCustomContent(Text("Brouillon"), extra.draft.map { Text(verbatim: $0) })
-            .accessibilityCustomContent(Text("Type"), extra.type.map { Text(verbatim: $0) })
+            // Seule la variante à clé accepte une valeur absente (`nil` : rien n'est ajouté).
+            .accessibilityCustomContent(
+                AccessibilityCustomContentKey(Text("État"), id: "chat.state"),
+                extra.state.map { Text(verbatim: $0) }
+            )
+            .accessibilityCustomContent(
+                AccessibilityCustomContentKey(Text("Brouillon"), id: "chat.draft"),
+                extra.draft.map { Text(verbatim: $0) }
+            )
+            .accessibilityCustomContent(
+                AccessibilityCustomContentKey(Text("Type"), id: "chat.type"),
+                extra.type.map { Text(verbatim: $0) }
+            )
     }
 }
 
