@@ -5,6 +5,12 @@ import SwiftUI
 struct ChatRow: View {
     let row: ChatRowModel
     let now: Date
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    /// Aux tailles « accessibilité », rien n'est tronqué : la ligne s'allonge.
+    private var lineLimit: Int? {
+        typeSize.isAccessibilitySize ? nil : 2
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -17,7 +23,7 @@ struct ChatRow: View {
                     }
                     Text(row.title)
                         .font(.headline)
-                        .lineLimit(2)
+                        .lineLimit(lineLimit)
                     Spacer(minLength: 8)
                     if let message = row.lastMessage {
                         Text(ChatListLabels.visibleTime(message.date, now: now, calendar: .current))
@@ -28,7 +34,7 @@ struct ChatRow: View {
                 HStack(alignment: .top) {
                     preview
                         .font(.subheadline)
-                        .lineLimit(2)
+                        .lineLimit(lineLimit)
                     Spacer(minLength: 8)
                     indicators
                 }

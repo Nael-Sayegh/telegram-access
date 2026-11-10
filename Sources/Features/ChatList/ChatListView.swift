@@ -101,8 +101,13 @@ struct ChatListView: View {
                 .accessibilityLabel(archive)
             }
             ChatRows(model: model, emptyText: model.filter.emptyText, rotorNamespace: rotorNamespace)
-        } footer: {
-            AppDisclaimer()
+        }
+        Section {
+            // Ligne ordinaire, couleur de texte principale : en pied de section d'une liste
+            // « plain », le gris de `AppDisclaimer` échoue à l'audit de contraste.
+            Text("\(RootView.appName) est un client Telegram non officiel.")
+                .font(.footnote)
+                .listRowSeparator(.hidden)
         }
     }
 

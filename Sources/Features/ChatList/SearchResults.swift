@@ -65,13 +65,15 @@ struct SearchResults: View {
 private struct SearchMessageView: View {
     let row: SearchMessageRow
     let now: Date
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline) {
                 Text(row.chatTitle)
                     .font(.headline)
-                    .lineLimit(2)
+                    // Aux tailles « accessibilité », rien n'est tronqué.
+                    .lineLimit(typeSize.isAccessibilitySize ? nil : 2)
                 Spacer(minLength: 8)
                 Text(ChatListLabels.visibleTime(row.line.date, now: now, calendar: .current))
                     .font(.footnote)
@@ -80,7 +82,7 @@ private struct SearchMessageView: View {
             Text(ChatListLabels.visiblePreview(row.line))
                 .font(.subheadline)
                 .readableSecondary()
-                .lineLimit(3)
+                .lineLimit(typeSize.isAccessibilitySize ? nil : 3)
         }
         .padding(.vertical, 4)
     }
