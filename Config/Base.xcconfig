@@ -4,7 +4,7 @@
 
 APP_DISPLAY_NAME = Accessigram
 PRODUCT_BUNDLE_IDENTIFIER = com.nael.telegramaccess
-MARKETING_VERSION = 0.2.5
+MARKETING_VERSION = 0.2.6
 CURRENT_PROJECT_VERSION = 1
 
 // Valeurs vides par défaut : l'app affiche un message explicite si elles manquent.
