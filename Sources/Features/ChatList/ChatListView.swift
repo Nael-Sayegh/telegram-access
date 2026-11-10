@@ -11,6 +11,7 @@ struct ChatListView: View {
     @Bindable var auth: AuthViewModel
     @State private var model: ChatListViewModel
     @State private var confirmsLogout = false
+    @Namespace private var rotorNamespace
     private let service: any ChatListService
 
     init(auth: AuthViewModel, store: ChatStore, service: any ChatListService) {
@@ -21,6 +22,9 @@ struct ChatListView: View {
 
     var body: some View {
         List {
+            Section {
+                ChatFilterBar(model: model)
+            }
             if let connection = model.connectionText {
                 Section {
                     // Pas de `Label` : l'audit Dynamic Type signale son texte comme coupé aux
@@ -30,18 +34,19 @@ struct ChatListView: View {
                 }
             }
             Section {
-                if let archive = archiveLabel {
+                if let archive = archiveLabel, model.filter == .all {
                     NavigationLink(value: ChatRoute.archive) {
                         IconText(text: "Archives", systemImage: "archivebox")
                     }
                     .accessibilityLabel(archive)
                 }
-                ChatRows(model: model)
+                ChatRows(model: model, emptyText: model.filter.emptyText, rotorNamespace: rotorNamespace)
             } footer: {
                 AppDisclaimer()
             }
         }
         .listStyle(.plain)
+        .chatRotors(model, namespace: rotorNamespace)
         .navigationTitle("Discussions")
         // Ordre VoiceOver constant : « Options » puis « Discussions ». Avec un grand titre, le
         // titre passait de sous la barre (lu après Options) à dans la barre (lu avant) au
@@ -100,6 +105,7 @@ struct ChatListView: View {
 /// Conversations archivées.
 struct ArchiveView: View {
     @State private var model: ChatListViewModel
+    @Namespace private var rotorNamespace
 
     init(store: ChatStore, service: any ChatListService) {
         _model = State(initialValue: ChatListViewModel(list: .archive, store: store, service: service))
@@ -108,10 +114,11 @@ struct ArchiveView: View {
     var body: some View {
         List {
             Section {
-                ChatRows(model: model, emptyText: "Aucune conversation archivée.")
+                ChatRows(model: model, emptyText: "Aucune conversation archivée.", rotorNamespace: rotorNamespace)
             }
         }
         .listStyle(.plain)
+        .chatRotors(model, namespace: rotorNamespace)
         .navigationTitle("Archives")
         .navigationBarTitleDisplayMode(.inline)
         .chatDeletionDialog(model)
@@ -122,7 +129,9 @@ struct ArchiveView: View {
 /// Lignes d'une liste de conversations : chargement, liste vide, conversations et leurs actions.
 struct ChatRows: View {
     let model: ChatListViewModel
-    var emptyText = "Aucune conversation."
+    let emptyText: String
+    /// Espace des rotors : chaque ligne y est repérée, même hors écran.
+    let rotorNamespace: Namespace.ID
 
     var body: some View {
         let items = model.rows
@@ -148,6 +157,7 @@ struct ChatRows: View {
                     }
                 }
                 .modifier(ChatSwipeActions(row: row, model: model))
+                .accessibilityRotorEntry(id: row.id, in: rotorNamespace)
                 .onAppear { model.rowAppeared(row.id) }
             }
             if !model.isFullyLoaded {
@@ -243,6 +253,25 @@ extension View {
                 AccessibilityCustomContentKey(Text("Type"), id: "chat.type"),
                 extra.type.map { Text(verbatim: $0) }
             )
+    }
+
+    /// Rotors VoiceOver « Non lus », « Mentions », « Épinglées » : aller directement d'une
+    /// conversation concernée à la suivante, y compris hors écran.
+    func chatRotors(_ model: ChatListViewModel, namespace: Namespace.ID) -> some View {
+        let rows = model.rows
+        let unread = rows.filter(ChatRotor.unread.matches)
+        let mentions = rows.filter(ChatRotor.mentions.matches)
+        let pinned = rows.filter(ChatRotor.pinned.matches)
+        return self
+            .accessibilityRotor(Text(ChatRotor.unread.name)) {
+                ForEach(unread) { AccessibilityRotorEntry(Text($0.title), id: $0.id, in: namespace) }
+            }
+            .accessibilityRotor(Text(ChatRotor.mentions.name)) {
+                ForEach(mentions) { AccessibilityRotorEntry(Text($0.title), id: $0.id, in: namespace) }
+            }
+            .accessibilityRotor(Text(ChatRotor.pinned.name)) {
+                ForEach(pinned) { AccessibilityRotorEntry(Text($0.title), id: $0.id, in: namespace) }
+            }
     }
 
     /// Dialogue de confirmation de suppression (ou de sortie d'un groupe / d'une chaîne).

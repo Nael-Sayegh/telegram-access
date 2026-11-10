@@ -1,8 +1,8 @@
 import Foundation
 import Observation
 
-/// Liste de conversations (principale ou archives) : pagination, actions sur les conversations
-/// et état de connexion. Les filtres arrivent au lot 4.
+/// Liste de conversations (principale ou archives) : pagination, filtres, actions sur les
+/// conversations et état de connexion.
 @MainActor
 @Observable
 final class ChatListViewModel {
@@ -14,6 +14,8 @@ final class ChatListViewModel {
     private(set) var isFullyLoaded = false
     /// Vrai si le dernier chargement a échoué (réseau…) ; un nouvel essai a lieu au défilement.
     private(set) var loadFailed = false
+    /// Filtre courant (liste principale).
+    private(set) var filter: ChatFilter = .all
     /// Conversation dont la suppression attend confirmation (dialogue affiché).
     var deletionRequest: ChatRowModel?
     /// Dernière annonce faite (succès ou erreur d'une action), pour les tests.
@@ -39,9 +41,47 @@ final class ChatListViewModel {
         self.service = service
     }
 
+    /// Lignes affichées, filtre appliqué.
     var rows: [ChatRowModel] {
         let state = store.state
-        return state.chats(in: list).map { state.row(for: $0, in: list) }
+        let filter = filter
+        return state.chats(in: list)
+            .filter { filter.matches($0) }
+            .map { state.row(for: $0, in: list) }
+    }
+
+    /// Nombre de conversations de chaque filtre ; `nil` tant que la liste n'est pas
+    /// entièrement chargée (le nombre serait faux).
+    func count(for filter: ChatFilter) -> Int? {
+        guard isFullyLoaded else { return nil }
+        return store.state.chats(in: list).filter { filter.matches($0) }.count
+    }
+
+    // MARK: - Filtres
+
+    /// Applique un filtre. Un filtre autre que « Tous » fait charger toute la liste, puis le
+    /// nombre de résultats est annoncé (en file d'attente, sans couper la lecture).
+    func select(_ newFilter: ChatFilter) {
+        guard newFilter != filter else { return }
+        filter = newFilter
+        guard newFilter != .all else { return }
+        Task {
+            await loadAll()
+            guard filter == newFilter else { return }
+            let text = ChatFilter.resultAnnouncement(count: rows.count)
+            lastAnnouncement = text
+            Announcer.announceQueued(text)
+        }
+    }
+
+    /// Charge les pages jusqu'à la fin de la liste (ou jusqu'à un échec).
+    func loadAll() async {
+        while !isFullyLoaded {
+            await loadMore()
+            if loadFailed { return }
+            // Un chargement déjà en cours (défilement) : on lui laisse le temps de finir.
+            if isLoading { try? await Task.sleep(for: .milliseconds(100)) }
+        }
     }
 
     /// Texte d'état de connexion à afficher, `nil` une fois connecté.

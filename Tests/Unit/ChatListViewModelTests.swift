@@ -49,6 +49,28 @@ final class ChatListViewModelTests: XCTestCase {
         await waitUntil { model.rows.map(\.title) == ["Récente", "Ancienne"] }
     }
 
+    // MARK: - Filtres
+
+    func testFilterLoadsWholeListThenAnnouncesCount() async {
+        let (model, service) = await makeModel(pages: 3)
+        service.send(.newChat(ChatTestData.chat(1, kind: .channel, title: "Infos", order: 20)))
+        service.send(.newChat(ChatTestData.chat(2, title: "Marie", order: 10)))
+        await waitUntil { model.rows.count == 2 }
+        XCTAssertNil(model.count(for: .channels), "Nombre inconnu avant le chargement complet")
+
+        model.select(.channels)
+        XCTAssertEqual(model.rows.map(\.title), ["Infos"])
+        await waitUntil { model.lastAnnouncement == "1 conversation." }
+        XCTAssertTrue(model.isFullyLoaded)
+        let calls = await service.loadChatsCalls
+        XCTAssertEqual(calls.count, 4, "3 pages puis la fin de liste")
+        XCTAssertEqual(model.count(for: .channels), 1)
+        XCTAssertEqual(model.count(for: .all), 2)
+
+        model.select(.all)
+        XCTAssertEqual(model.rows.count, 2)
+    }
+
     // MARK: - Actions
 
     /// Modèle avec une conversation (id 1) chargée.
