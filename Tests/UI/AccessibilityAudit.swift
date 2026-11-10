@@ -25,6 +25,12 @@ enum AccessibilityAudit {
             return true
         }
         if !problems.isEmpty {
+            // Capture jointe au rapport : un problème sans élément identifié (« élément
+            // inconnu ») se repère à l'image.
+            let screenshot = XCTAttachment(screenshot: app.screenshot())
+            screenshot.name = "Écran audité"
+            screenshot.lifetime = .keepAlways
+            XCTContext.runActivity(named: "Capture de l'écran audité") { $0.add(screenshot) }
             XCTFail("Problèmes d'accessibilité :\n" + problems.joined(separator: "\n"), file: file, line: line)
         }
     }

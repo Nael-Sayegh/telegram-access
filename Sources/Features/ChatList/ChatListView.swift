@@ -57,10 +57,15 @@ struct ChatListView: View {
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Menu {
-                    Button("Se déconnecter", role: .destructive) {
-                        confirmsLogout = true
+                    // Mention « client non officiel » ici plutôt qu'en bas de la liste : en pied
+                    // de liste, elle échouait à l'audit de contraste (contenu défilant dessous)
+                    // et VoiceOver la lisait après toutes les conversations.
+                    Section("\(RootView.appName) est un client Telegram non officiel.") {
+                        Button("Se déconnecter", role: .destructive) {
+                            confirmsLogout = true
+                        }
+                        .disabled(auth.isBusy)
                     }
-                    .disabled(auth.isBusy)
                 } label: {
                     Label("Options", systemImage: "ellipsis.circle")
                 }
@@ -101,13 +106,6 @@ struct ChatListView: View {
                 .accessibilityLabel(archive)
             }
             ChatRows(model: model, emptyText: model.filter.emptyText, rotorNamespace: rotorNamespace)
-        }
-        Section {
-            // Ligne ordinaire, couleur de texte principale : en pied de section d'une liste
-            // « plain », le gris de `AppDisclaimer` échoue à l'audit de contraste.
-            Text("\(RootView.appName) est un client Telegram non officiel.")
-                .font(.footnote)
-                .listRowSeparator(.hidden)
         }
     }
 

@@ -94,9 +94,12 @@ final class ChatListAccessibilityTests: XCTestCase {
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Supprimer aussi pour Marie Dupont"].exists)
 
-        // iOS 26 : pas de bouton « Annuler » visible, le dialogue se ferme en touchant à côté
-        // (avec VoiceOver : geste d'échappement).
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.15)).tap()
+        // iOS 26 : pas de bouton « Annuler » visible, le dialogue (affiché près de la ligne, en
+        // haut) se ferme en touchant à côté. Avec VoiceOver : geste d'échappement.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9)).tap()
+        if !confirm.waitForNonExistence(timeout: 3) {
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.6)).tap()
+        }
         XCTAssertTrue(confirm.waitForNonExistence(timeout: 5), "Dialogue toujours affiché")
         XCTAssertTrue(row.exists, "La conversation doit rester sans confirmation")
     }
