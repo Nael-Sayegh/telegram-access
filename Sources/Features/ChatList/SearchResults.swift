@@ -23,6 +23,9 @@ struct GlobalSearchView: View {
                     .submitLabel(.search)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
+                    // Sur plusieurs lignes, le texte indicatif ne sert plus de libellé : sans
+                    // celui-ci, VoiceOver annoncerait une zone de texte sans nom.
+                    .accessibilityLabel(search.scope.prompt)
                 ChoiceChips(
                     label: "Rechercher dans",
                     options: SearchScope.allCases,

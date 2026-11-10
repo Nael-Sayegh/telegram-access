@@ -93,9 +93,14 @@ final class ChatListAccessibilityTests: XCTestCase {
         app.buttons["Rechercher"].tap()
         XCTAssertTrue(app.navigationBars["Rechercher"].waitForExistence(timeout: 5))
 
-        // Champ sur plusieurs lignes : vu comme une zone de texte, d'où la recherche par libellé.
-        let field = element(app, "Rechercher dans les messages")
-        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        // Champ sur plusieurs lignes, vu comme une zone de texte : recherché par libellé ou par
+        // texte indicatif, quel que soit son type.
+        let prompt = "Rechercher dans les messages"
+        let field = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == %@ OR placeholderValue == %@", prompt, prompt))
+            .firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "Champ de recherche introuvable")
+        XCTAssertEqual(field.label, prompt, "Le champ doit avoir un libellé pour VoiceOver")
         field.tap()
         app.typeText("demain\n")
         let message = element(app, "Marie Dupont, On se voit demain ?, 9 h 05")
