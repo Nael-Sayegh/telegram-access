@@ -1,6 +1,6 @@
 # Plan de développement — Client Telegram accessible VoiceOver (iPhone)
 
-> Dernière mise à jour : 2026-11-08
+> Dernière mise à jour : 2026-11-10
 > Objectifs : connexion par numéro de téléphone, accessibilité lecteur d'écran prioritaire, sécurité des communications.
 > Contraintes : dépôt Git **privé** sur GitHub, développement sous Windows, **compilation / signature / upload via GitHub Actions macOS**.
 
@@ -232,4 +232,4 @@ telegram-access/                  # dépôt GitHub privé
 - Nom affiché définitif (provisoire : « Accessigram », dans `Config/Base.xcconfig`) — doit respecter les conditions de Telegram.
 - Push chiffrées (phase 6) : l'extension de notification doit lire la base TDLib appareil verrouillé, ce qui est incompatible avec `completeUnlessOpen` et la clé `WhenUnlockedThisDeviceOnly` → choisir avant la phase 6 (ex. `completeUntilFirstUserAuthentication` + `AfterFirstUnlockThisDeviceOnly` en App Group, avec migration de la clé).
 
-**Prochaine étape** : lancer la CI manuellement (audits UI), test VoiceOver sur iPhone via TestFlight (annonce des erreurs, conditions d'utilisation, récupération du mot de passe), puis phase 2 (liste des conversations).
+**Prochaine étape** : CI de la branche `phase-2` (nouveaux tests UI), test VoiceOver sur iPhone de la recherche et des rotors (dont lignes hors écran) et du focus quand une conversation remonte en tête, PR vers `main`, puis phase 3 (conversation).
