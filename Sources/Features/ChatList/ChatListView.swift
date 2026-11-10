@@ -35,11 +35,15 @@ struct ChatListView: View {
         }
         .listStyle(.plain)
         .navigationTitle("Discussions")
+        // Ordre VoiceOver constant : « Options » puis « Discussions ». Avec un grand titre, le
+        // titre passait de sous la barre (lu après Options) à dans la barre (lu avant) au
+        // défilement. Titre toujours dans la barre et Options à gauche : lu en premier.
+        .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(for: Int64.self) { chatId in
             ConversationPlaceholderView(title: title(of: chatId))
         }
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .topBarLeading) {
                 Menu {
                     Button("Se déconnecter", role: .destructive) {
                         confirmsLogout = true
