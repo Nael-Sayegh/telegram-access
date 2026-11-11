@@ -31,6 +31,9 @@ struct MessageListView: View {
                     .accessibilityFocused($focusedItem, equals: item.id)
             }
             .listStyle(.plain)
+            // Le premier titre de jour n'est jamais collé à la barre du haut, dont les
+            // boutons (capsules d'iOS 26) projettent une ombre.
+            .contentMargins(.top, 20, for: .scrollContent)
             .environment(\.defaultMinListRowHeight, 1)
             .scrollDismissesKeyboard(.interactively)
             .onChange(of: items.first?.id) { oldFirst, _ in
@@ -59,16 +62,13 @@ struct MessageListView: View {
     @ViewBuilder
     private func row(_ item: ConversationItem) -> some View {
         switch item {
-        case .start:
-            // Toute première ligne, juste sous la barre du haut, dont les boutons (iOS 26)
-            // projettent une ombre grise : l'audit de contraste mesurait cette ombre dans le
-            // cadre de l'élément. Texte en couleur principale, cadre réduit aux lettres
-            // (`CenteredText`) et marge hors de l'élément pour descendre sous l'ombre.
-            CenteredText(text: "Début de la conversation.", font: .subheadline)
-                .padding(.top, 36)
-                .padding(.bottom, 8)
-        case .day(_, let title):
-            CenteredText(text: title, font: .subheadline.weight(.semibold), isHeader: true)
+        case .day(_, let title, let isStart):
+            CenteredText(
+                text: title,
+                font: .subheadline.weight(.semibold),
+                isHeader: true,
+                spokenText: isStart ? "\(title), début de la conversation" : nil
+            )
                 .padding(.top, 10)
                 .padding(.bottom, 4)
         case .message(let message):
@@ -154,6 +154,8 @@ private struct CenteredText: View {
     let text: String
     let font: Font
     var isHeader = false
+    /// Libellé VoiceOver, s'il diffère du texte affiché.
+    var spokenText: String?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -163,6 +165,7 @@ private struct CenteredText: View {
                 .foregroundStyle(Color.primary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel(Text(verbatim: spokenText ?? text))
                 .accessibilityAddTraits(isHeader ? .isHeader : [])
             Spacer(minLength: 0)
         }

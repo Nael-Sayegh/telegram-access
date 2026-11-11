@@ -236,7 +236,8 @@ final class ConversationSectionTests: XCTestCase {
         XCTAssertEqual(sections.map { $0.rows.map(\.id) }, [[1, 2], [3]])
     }
 
-    /// Lignes de la liste dans l'ordre de lecture : début, puis chaque jour suivi de ses messages.
+    /// Lignes de la liste dans l'ordre de lecture : chaque jour suivi de ses messages ; le
+    /// premier jour signale le début de la conversation une fois tout l'historique chargé.
     func testItemsFollowReadingOrder() {
         let rows = [
             row(1, ChatTestData.date(2026, 11, 9, 18, 0)),
@@ -244,13 +245,16 @@ final class ConversationSectionTests: XCTestCase {
             row(3, ChatTestData.date(2026, 11, 10, 9, 30)),
         ]
         let sections = ConversationSection.make(rows, now: ChatTestData.now, calendar: calendar)
-        let items = ConversationItem.list(sections, showsStart: true)
+        let items = ConversationItem.list(sections, reachedStart: true)
         XCTAssertEqual(items.map(\.id), [
-            .start,
             .day(sections[0].id), .message(1),
             .day(sections[1].id), .message(2), .message(3),
         ])
-        XCTAssertEqual(ConversationItem.list(sections, showsStart: false).first?.id, .day(sections[0].id))
+        XCTAssertEqual(items.first, .day(id: sections[0].id, title: "Hier", isStart: true))
+        XCTAssertEqual(items[2], .day(id: sections[1].id, title: "Aujourd'hui", isStart: false))
+
+        let partial = ConversationItem.list(sections, reachedStart: false)
+        XCTAssertEqual(partial.first, .day(id: sections[0].id, title: "Hier", isStart: false))
     }
 
     /// Un message daté hors de l'ordre ne recrée pas un jour déjà présent (identifiants de

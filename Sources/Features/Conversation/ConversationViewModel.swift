@@ -27,34 +27,35 @@ struct ConversationSection: Identifiable, Equatable {
     }
 }
 
-/// Ligne de la liste des messages, dans l'ordre de lecture VoiceOver : début de la
-/// conversation, puis pour chaque jour son titre suivi de ses messages. Les titres de jour
-/// sont des lignes ordinaires (pas des en-têtes « collants ») : balayer à droite donne
-/// toujours l'élément suivant, à gauche le précédent, sans saut.
+/// Ligne de la liste des messages, dans l'ordre de lecture VoiceOver : pour chaque jour son
+/// titre suivi de ses messages. Les titres de jour sont des lignes ordinaires (pas des
+/// en-têtes « collants ») : balayer à droite donne toujours l'élément suivant, à gauche le
+/// précédent, sans saut.
 enum ConversationItem: Identifiable, Equatable {
-    /// « Début de la conversation. », une fois le premier message chargé.
-    case start
-    case day(id: Date, title: String)
+    /// Titre d'un jour. `isStart` : premier jour de la conversation, tout l'historique est
+    /// chargé (« Hier, début de la conversation »). Pas de ligne séparée : une ligne insérée
+    /// après coup en haut de liste échouait à l'audit de contraste, et ce serait un élément
+    /// de plus à balayer.
+    case day(id: Date, title: String, isStart: Bool)
     case message(MessageRowModel)
 
     enum ID: Hashable {
-        case start
         case day(Date)
         case message(Int64)
     }
 
     var id: ID {
         switch self {
-        case .start: return .start
-        case .day(let day, _): return .day(day)
+        case .day(let day, _, _): return .day(day)
         case .message(let row): return .message(row.id)
         }
     }
 
-    static func list(_ sections: [ConversationSection], showsStart: Bool) -> [ConversationItem] {
-        var items: [ConversationItem] = showsStart ? [.start] : []
-        for section in sections {
-            items.append(.day(id: section.id, title: section.title))
+    /// `reachedStart` : le premier message de la conversation est chargé.
+    static func list(_ sections: [ConversationSection], reachedStart: Bool) -> [ConversationItem] {
+        var items: [ConversationItem] = []
+        for (index, section) in sections.enumerated() {
+            items.append(.day(id: section.id, title: section.title, isStart: reachedStart && index == 0))
             items += section.rows.map { .message($0) }
         }
         return items
@@ -157,9 +158,9 @@ final class ConversationViewModel {
         return ConversationSection.make(rows, now: Date(), calendar: .current)
     }
 
-    /// Lignes de la liste : début de la conversation, jours et messages, dans l'ordre.
+    /// Lignes de la liste : jours et messages, dans l'ordre.
     var items: [ConversationItem] {
-        ConversationItem.list(sections, showsStart: state.reachedOldest && !state.orderedIds.isEmpty)
+        ConversationItem.list(sections, reachedStart: state.reachedOldest)
     }
 
     /// Faux tant que le brouillon est vide (espaces compris) : le bouton Envoyer est estompé.

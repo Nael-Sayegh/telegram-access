@@ -58,21 +58,25 @@ final class ConversationAccessibilityTests: XCTestCase {
         XCTAssertTrue(element(app, "Vous, Pas encore, je regarde ce soir., 18 h 45, lu").exists)
     }
 
+    /// Titres de jour ; le premier signale le début de la conversation une fois tout
+    /// l'historique chargé.
     @MainActor
     func testDayHeaders() throws {
         let app = openMarie()
         XCTAssertTrue(element(app, "Aujourd'hui").waitForExistence(timeout: 5), "En-tête du jour absent")
-        XCTAssertTrue(element(app, "Hier").waitForExistence(timeout: 5), "En-tête d'hier absent")
+        XCTAssertTrue(element(app, Self.firstDay).waitForExistence(timeout: 5), "Début de la conversation non signalé")
     }
 
+    /// Premier titre de jour de Marie, une fois tout l'historique chargé.
+    private static let firstDay = "Hier, début de la conversation"
+
     /// Comme WhatsApp : balayer donne chaque élément dans l'ordre chronologique, sans en
-    /// sauter — début de la conversation, jour, messages du jour, jour suivant…
+    /// sauter — jour (le premier signale le début), messages du jour, jour suivant…
     @MainActor
     func testMessagesAreReadInChronologicalOrder() throws {
         let app = openMarie()
         let expected = [
-            "Début de la conversation.",
-            "Hier",
+            Self.firstDay,
             "Tu as vu le programme de samedi ?, 18 h 30",
             "Vous, Pas encore, je regarde ce soir., 18 h 45, lu",
             "Message vocal, 12 secondes, 19 h",
@@ -81,7 +85,7 @@ final class ConversationAccessibilityTests: XCTestCase {
             "Alors, tu l'as regardé ?, en réponse à votre message : Pas encore, je regarde ce soir., 9 h",
             "On se voit demain ?, 9 h 05",
         ]
-        XCTAssertTrue(element(app, "Début de la conversation.").waitForExistence(timeout: 5), "Début non signalé")
+        XCTAssertTrue(element(app, Self.firstDay).waitForExistence(timeout: 5), "Début non signalé")
         var order: [String] = []
         for label in app.descendants(matching: .any).allElementsBoundByIndex.map(\.label)
         where expected.contains(label) && !order.contains(label) {
@@ -90,26 +94,16 @@ final class ConversationAccessibilityTests: XCTestCase {
         XCTAssertEqual(order, expected)
     }
 
-    /// Audit complet, sauf taille du texte et texte coupé, que l'audit n'arrivait pas à évaluer
-    /// dans l'ancienne liste UIKit (« élément inconnu », 2026-11-11) : contrôlés par
-    /// `testMessagesGrowWithTextSize`. Avec la liste SwiftUI, ces deux contrôles sont lancés à
-    /// titre d'information (journal du test) pour décider de les réactiver.
+    /// Audit complet, taille du texte comprise : avec la liste SwiftUI, l'audit l'évalue (il
+    /// n'y arrivait pas dans l'ancienne liste UIKit, 2026-11-11). `testMessagesGrowWithTextSize`
+    /// la contrôle aussi directement.
     @MainActor
     func testConversationScreen() throws {
         let app = openMarie()
         XCTAssertTrue(app.buttons["Aller au premier message non lu"].exists)
         XCTAssertTrue(app.buttons["Aller au dernier message"].exists)
-
-        // D'abord, pour l'avoir même si l'audit suivant échoue.
-        var reported = 0
-        try app.performAccessibilityAudit(for: [.dynamicType, .textClipped]) { issue in
-            reported += 1
-            print("Audit Dynamic Type (information) : \(issue.compactDescription) — \(issue.element?.label ?? "élément inconnu")")
-            return true
-        }
-        print("Audit Dynamic Type (information) : \(reported) problème(s) signalé(s).")
-
-        try AccessibilityAudit.run(app, excluding: [.dynamicType, .textClipped])
+        XCTAssertTrue(element(app, Self.firstDay).waitForExistence(timeout: 5))
+        try AccessibilityAudit.run(app)
     }
 
     /// Dynamic Type : en très grande taille de texte (accessibilité XXXL), un message est
