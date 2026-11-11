@@ -1,10 +1,13 @@
 import XCTest
 @testable import TelegramAccess
 
-/// Service de connexion factice : enregistre les appels et peut simuler une erreur Telegram.
-actor FakeAuthService: AuthService {
+/// Service Telegram factice : enregistre les appels de connexion et peut simuler une erreur
+/// Telegram. Les opérations sur les conversations ne font rien.
+actor FakeAuthService: TelegramService {
     nonisolated let steps: AsyncStream<AuthStep>
     private let continuation: AsyncStream<AuthStep>.Continuation
+    nonisolated let chatEvents: AsyncStream<ChatListEvent>
+    private let chatContinuation: AsyncStream<ChatListEvent>.Continuation
 
     private(set) var phoneNumbers: [String] = []
     private(set) var registrations: [String] = []
@@ -17,11 +20,19 @@ actor FakeAuthService: AuthService {
         let stream = AsyncStream.makeStream(of: AuthStep.self)
         steps = stream.stream
         continuation = stream.continuation
+        let chatStream = AsyncStream.makeStream(of: ChatListEvent.self)
+        chatEvents = chatStream.stream
+        chatContinuation = chatStream.continuation
     }
 
     /// Simule un nouvel état reçu de TDLib.
     nonisolated func send(_ step: AuthStep) {
         continuation.yield(step)
+    }
+
+    /// Simule un changement de la liste des conversations reçu de TDLib.
+    nonisolated func send(_ event: ChatListEvent) {
+        chatContinuation.yield(event)
     }
 
     func failNextCall(with error: TelegramError) {
@@ -63,6 +74,79 @@ actor FakeAuthService: AuthService {
     func logOut() throws { try throwIfNeeded() }
     func countries() -> [Country] { [] }
     func estimatedCountryCode() -> String { "FR" }
+
+    private(set) var loadChatsCalls: [ChatListKind] = []
+    /// Pages restant à charger avant que `loadChats` signale la fin de la liste.
+    private var pagesLeft = 0
+
+    func setPagesLeft(_ count: Int) {
+        pagesLeft = count
+    }
+
+    func loadChats(_ list: ChatListKind, limit: Int) throws -> Bool {
+        try throwIfNeeded()
+        loadChatsCalls.append(list)
+        guard pagesLeft > 0 else { return false }
+        pagesLeft -= 1
+        return true
+    }
+
+    /// Actions reçues sur les conversations, ex. « pin 1 main true ».
+    private(set) var chatCalls: [String] = []
+
+    func markAsRead(_ chat: ChatSummary) throws {
+        try throwIfNeeded()
+        chatCalls.append("read \(chat.id)")
+    }
+
+    func setMarkedAsUnread(chatId: Int64, _ isMarkedAsUnread: Bool) throws {
+        try throwIfNeeded()
+        chatCalls.append("unread \(chatId) \(isMarkedAsUnread)")
+    }
+
+    func setPinned(chatId: Int64, in list: ChatListKind, _ isPinned: Bool) throws {
+        try throwIfNeeded()
+        chatCalls.append("pin \(chatId) \(list) \(isPinned)")
+    }
+
+    func setMuted(chatId: Int64, _ isMuted: Bool) throws {
+        try throwIfNeeded()
+        chatCalls.append("mute \(chatId) \(isMuted)")
+    }
+
+    func moveChat(chatId: Int64, to list: ChatListKind) throws {
+        try throwIfNeeded()
+        chatCalls.append("move \(chatId) \(list)")
+    }
+
+    func deleteChat(_ chat: ChatSummary, forEveryone: Bool) throws {
+        try throwIfNeeded()
+        chatCalls.append("delete \(chat.id) \(forEveryone)")
+    }
+    /// Recherches de messages reçues : « requête|décalage ».
+    private(set) var messageSearches: [String] = []
+    private var foundChats: [Int64] = []
+    private var foundPublicChats: [Int64] = []
+    /// Pages de messages renvoyées dans l'ordre, puis une page vide.
+    private var messagePages: [MessageSearchPage] = []
+
+    func setSearchResults(chats: [Int64], publicChats: [Int64] = [], messagePages: [MessageSearchPage] = []) {
+        foundChats = chats
+        foundPublicChats = publicChats
+        self.messagePages = messagePages
+    }
+
+    func searchChats(_ query: String, limit: Int) throws -> [Int64] {
+        try throwIfNeeded()
+        return foundChats
+    }
+
+    func searchPublicChats(_ query: String) -> [Int64] { foundPublicChats }
+
+    func searchMessages(_ query: String, offset: String, limit: Int) -> MessageSearchPage {
+        messageSearches.append("\(query)|\(offset)")
+        return messagePages.isEmpty ? MessageSearchPage(results: [], nextOffset: "") : messagePages.removeFirst()
+    }
 
     private func throwIfNeeded() throws {
         if let error = nextError {
@@ -210,6 +294,23 @@ final class AuthViewModelTests: XCTestCase {
         services[0].send(.ready)
         services[1].send(.phoneNumber)
         await waitUntil { model.step == .phoneNumber }
+    }
+
+    /// Le store des conversations naît avec le client (aucun `updateNewChat` perdu) et est
+    /// remplacé avec lui après une déconnexion.
+    func testChatStoreFollowsTheClient() async {
+        let model = makeModel()
+        let firstStore = model.chats
+        XCTAssertNotNil(firstStore)
+
+        service.send(.myUserId(42))
+        await waitUntil { model.chats?.state.myUserId == 42 }
+
+        service.send(.closed)
+        await waitUntil { self.services.count == 2 }
+        XCTAssertNotNil(model.chats)
+        XCTAssertFalse(model.chats === firstStore)
+        XCTAssertNil(model.chats?.state.myUserId)
     }
 
     func testForgotPasswordOpensRecovery() async {

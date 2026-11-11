@@ -1,6 +1,6 @@
 # Plan de développement — Client Telegram accessible VoiceOver (iPhone)
 
-> Dernière mise à jour : 2026-11-08
+> Dernière mise à jour : 2026-11-10
 > Objectifs : connexion par numéro de téléphone, accessibilité lecteur d'écran prioritaire, sécurité des communications.
 > Contraintes : dépôt Git **privé** sur GitHub, développement sous Windows, **compilation / signature / upload via GitHub Actions macOS**.
 
@@ -222,6 +222,8 @@ telegram-access/                  # dépôt GitHub privé
 - 2026-11-09, revue de la phase 1 : conditions d'utilisation affichées à l'inscription, « Mot de passe oublié », longueur de code inconnue (0) gérée, erreur rattachée au champ fautif (pays, nom…) avec annonce si le focus y est déjà, « Déconnexion… » pendant la déconnexion, « Réessayer » sans recréer de client TDLib, clé créée après l'effacement du dossier, effacement du dossier et de la clé à la déconnexion, journaux TDLib coupés en Release, chiffres saisis normalisés en ASCII, `SWIFT_STRICT_CONCURRENCY: complete`, XcodeGen épinglé, release sans cache ; tests unitaires de `AuthViewModel` (service factice) et audits UI de chaque écran.
 - 2026-11-09 : `ITSAppUsesNonExemptEncryption = NO` dans `Info.plist` → App Store Connect ne pose plus la question du chiffrement à chaque build. Valable tant que l'app n'est pas disponible en France sur l'App Store (algorithmes standard via TDLib/OpenSSL : seule la déclaration française serait exigée). Détails : `docs/CONFIGURATION.md`.
 
+- 2026-11-10, phase 2 (branche `phase-2`) : liste des conversations alimentée par les updates TDLib (store créé avec le client, aucun `updateNewChat` perdu), une ligne = un élément VoiceOver (« Marie Dupont, 3 non lus, dernier message : …, 14 h 32 », « conversation secrète » dans le libellé, médias décrits), contenu secondaire (épinglée, sourdine, brouillon, type) dans « Plus de contenu », pagination, état de connexion annoncé seulement s'il dure ; actions personnalisées (lu / non lu, épingler, notifications, archiver, supprimer ou quitter avec confirmation), balayage hors VoiceOver ; écran Archives ; filtres Tous / Non lus / Personnes / Groupes / Chaînes dans un menu « Filtre » (« Filtre : Non lus ») ; rotors Non lus, Mentions, Épinglées ; recherche sur un écran dédié ouvert par le bouton « Rechercher », dans les messages (par défaut, paginés) ou parmi les conversations (y compris groupes et chaînes publics), résultat annoncé une fois. Barre du haut lue dans un ordre constant : Options, Discussions, Rechercher, Filtre (titre toujours dans la barre ; pas de `.searchable`, placé en bas de l'écran par iOS 26). Mention « client non officiel » dans le menu Options. Tests unitaires (réducteur, libellés, modèles de vue) et tests UI avec conversations factices. Conversation : écran provisoire (phase 3).
+
 **Reste à faire côté compte (manuel)**
 - Rien de bloquant pour TestFlight (secrets `release` en place, envoi fonctionnel).
 - Avant de rendre l'app disponible en France sur l'App Store : déclaration ANSSI, envoi dans App Store Connect, puis `ITSAppUsesNonExemptEncryption = YES` + `ITSEncryptionExportComplianceCode` (voir `docs/CONFIGURATION.md`).
@@ -230,4 +232,4 @@ telegram-access/                  # dépôt GitHub privé
 - Nom affiché définitif (provisoire : « Accessigram », dans `Config/Base.xcconfig`) — doit respecter les conditions de Telegram.
 - Push chiffrées (phase 6) : l'extension de notification doit lire la base TDLib appareil verrouillé, ce qui est incompatible avec `completeUnlessOpen` et la clé `WhenUnlockedThisDeviceOnly` → choisir avant la phase 6 (ex. `completeUntilFirstUserAuthentication` + `AfterFirstUnlockThisDeviceOnly` en App Group, avec migration de la clé).
 
-**Prochaine étape** : lancer la CI manuellement (audits UI), test VoiceOver sur iPhone via TestFlight (annonce des erreurs, conditions d'utilisation, récupération du mot de passe), puis phase 2 (liste des conversations).
+**Prochaine étape** : CI de la branche `phase-2` (nouveaux tests UI), test VoiceOver sur iPhone de la recherche et des rotors (dont lignes hors écran) et du focus quand une conversation remonte en tête, PR vers `main`, puis phase 3 (conversation).
