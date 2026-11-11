@@ -97,6 +97,32 @@ enum ConversationLabels {
         }
     }
 
+    // MARK: - Envoi
+
+    /// Annonce après l'acceptation d'un message par Telegram.
+    static let messageSent = "Message envoyé."
+
+    /// Raison d'un échec d'envoi, en phrase compréhensible.
+    static func sendFailure(_ error: Error) -> String {
+        let fallback = "Échec de l'envoi. Vérifiez votre connexion et réessayez."
+        guard let telegram = error as? TelegramError else { return fallback }
+        let text = telegram.message.uppercased()
+        if telegram.code == 429 || text.hasPrefix("FLOOD_WAIT") || text.contains("TOO MANY REQUESTS") {
+            return "Trop de messages envoyés. Réessayez dans quelques instants."
+        }
+        if text.contains("MESSAGE_TOO_LONG") {
+            return "Échec de l'envoi : message trop long."
+        }
+        if text.contains("CHAT_WRITE_FORBIDDEN") || text.contains("WRITE ACCESS")
+            || text.contains("USER_IS_BLOCKED") || text.contains("YOU_BLOCKED_USER") {
+            return "Échec de l'envoi : vous ne pouvez pas écrire dans cette conversation."
+        }
+        if text.contains("PEER_FLOOD") {
+            return "Échec de l'envoi : Telegram limite temporairement vos envois."
+        }
+        return fallback
+    }
+
     // MARK: - Liens
 
     /// Nom de l'action d'ouverture d'un lien. Il donne la vraie destination, et non le texte

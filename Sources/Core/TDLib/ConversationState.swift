@@ -83,15 +83,19 @@ struct ConversationState {
         merge(older)
     }
 
-    /// Ajoute une page de messages plus récents. Une page sans message plus récent, ou qui
-    /// atteint `lastMessageId` (dernier message connu de la conversation), marque la fin.
+    /// Ajoute une page de messages plus récents. La fin est atteinte quand la fenêtre contient
+    /// `lastMessageId` (dernier message connu de la conversation) ; s'il est inconnu, quand la
+    /// page n'apporte aucun message plus récent. (TDLib peut renvoyer une page vide alors qu'il
+    /// reste des messages : le dernier message connu fait foi.)
     mutating func appendNewer(_ page: [ChatMessage], lastMessageId: Int64?) {
         let newest = newestId ?? .min
         let newer = page.filter { $0.chatId == chatId && $0.id > newest }
         merge(newer)
-        if newer.isEmpty {
-            reachedLatest = true
-        } else if let lastMessageId, let newestId, newestId >= lastMessageId {
+        if let lastMessageId {
+            if let newestId, newestId >= lastMessageId {
+                reachedLatest = true
+            }
+        } else if newer.isEmpty {
             reachedLatest = true
         }
     }

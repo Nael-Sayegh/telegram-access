@@ -38,8 +38,18 @@ final class ConversationStateTests: XCTestCase {
         XCTAssertEqual(state.orderedIds, [10, 20, 30, 40])
         XCTAssertFalse(state.reachedLatest)
 
+        state.appendNewer([], lastMessageId: 50)
+        XCTAssertFalse(state.reachedLatest, "Page vide mais message 50 pas encore chargé")
+
         state.appendNewer([Fixture.message(50), Fixture.message(40)], lastMessageId: 50)
         XCTAssertTrue(state.reachedLatest, "Dernier message connu atteint")
+    }
+
+    func testEmptyNewerPageEndsWindowWhenLastMessageIsUnknown() {
+        var state = ConversationState(chatId: Fixture.chatId)
+        state.reset(with: [Fixture.message(10)], isLatest: false)
+        state.appendNewer([Fixture.message(10)], lastMessageId: nil)
+        XCTAssertTrue(state.reachedLatest)
     }
 
     func testNewMessageIsAppendedOnlyWhenWindowReachesLatest() {

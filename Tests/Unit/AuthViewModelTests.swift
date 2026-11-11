@@ -196,8 +196,19 @@ actor FakeAuthService: TelegramService {
         messageCalls.append("close \(chatId)")
     }
 
+    private var historyError: TelegramError?
+
+    /// Fait échouer la prochaine demande d'historique seulement.
+    func failNextHistory(with error: TelegramError) {
+        historyError = error
+    }
+
     func history(chatId: Int64, from fromMessageId: Int64, offset: Int, limit: Int) throws -> [ChatMessage] {
         try throwIfNeeded()
+        if let error = historyError {
+            historyError = nil
+            throw error
+        }
         historyCalls.append("\(chatId) \(fromMessageId) \(offset) \(limit)")
         return historyPages.isEmpty ? [] : historyPages.removeFirst()
     }
@@ -219,9 +230,14 @@ actor FakeAuthService: TelegramService {
         messageCalls.append("view \(chatId) \(ids.map { String($0) }.joined(separator: ","))")
     }
 
-    func sendText(_ text: String, chatId: Int64, replyTo: Int64?) throws {
+    /// Identifiant provisoire du prochain message envoyé.
+    private(set) var nextTemporaryId: Int64 = 1000
+
+    func sendText(_ text: String, chatId: Int64, replyTo: Int64?) throws -> Int64 {
         try throwIfNeeded()
         messageCalls.append("send \(chatId) \(text)" + (replyTo.map { " reply:\($0)" } ?? ""))
+        nextTemporaryId += 1
+        return nextTemporaryId - 1
     }
 
     func editText(_ text: String, chatId: Int64, messageId: Int64) throws {
@@ -270,9 +286,11 @@ actor FakeAuthService: TelegramService {
         return FileRef(id: fileId, size: 0, localPath: "/tmp/\(fileId)")
     }
 
-    func sendVoiceNote(chatId: Int64, file: URL, duration: Int, waveform: Data, replyTo: Int64?) throws {
+    func sendVoiceNote(chatId: Int64, file: URL, duration: Int, waveform: Data, replyTo: Int64?) throws -> Int64 {
         try throwIfNeeded()
         messageCalls.append("voice \(chatId) \(duration)")
+        nextTemporaryId += 1
+        return nextTemporaryId - 1
     }
 
     func setActivity(chatId: Int64, _ activity: ChatActivity?) {}

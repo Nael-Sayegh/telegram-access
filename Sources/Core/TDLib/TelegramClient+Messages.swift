@@ -50,10 +50,10 @@ extension TelegramClient: ConversationService {
         }
     }
 
-    func sendText(_ text: String, chatId: Int64, replyTo: Int64?) async throws {
+    func sendText(_ text: String, chatId: Int64, replyTo: Int64?) async throws -> Int64 {
         let content = InputMessageContent.inputMessageText(Self.inputText(text, clearDraft: true))
         let reply = replyTo.map { Self.inputReply(to: $0) }
-        _ = try await run {
+        let message = try await run {
             try await $0.sendMessage(
                 chatId: chatId,
                 inputMessageContent: content,
@@ -63,6 +63,7 @@ extension TelegramClient: ConversationService {
                 topicId: nil
             )
         }
+        return message.id
     }
 
     /// Le texte modifié remplace l'ancien sans mise en forme (gras, liens nommés…).
@@ -180,7 +181,7 @@ extension TelegramClient: ConversationService {
         return FileRef(file)
     }
 
-    func sendVoiceNote(chatId: Int64, file: URL, duration: Int, waveform: Data, replyTo: Int64?) async throws {
+    func sendVoiceNote(chatId: Int64, file: URL, duration: Int, waveform: Data, replyTo: Int64?) async throws -> Int64 {
         let voiceNote = InputVoiceNote(
             duration: duration,
             voiceNote: .inputFileLocal(InputFileLocal(path: file.path)),
@@ -190,7 +191,7 @@ extension TelegramClient: ConversationService {
             InputMessageVoiceNote(caption: nil, selfDestructType: nil, voiceNote: voiceNote)
         )
         let reply = replyTo.map { Self.inputReply(to: $0) }
-        _ = try await run {
+        let message = try await run {
             try await $0.sendMessage(
                 chatId: chatId,
                 inputMessageContent: content,
@@ -200,6 +201,7 @@ extension TelegramClient: ConversationService {
                 topicId: nil
             )
         }
+        return message.id
     }
 
     func setActivity(chatId: Int64, _ activity: ChatActivity?) async throws {

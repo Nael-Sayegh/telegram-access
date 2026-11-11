@@ -25,9 +25,10 @@ protocol ConversationService: AnyObject, Sendable {
     /// Messages affichés à l'écran (lecture, compteurs de vues).
     func viewMessages(chatId: Int64, ids: [Int64]) async throws
 
-    /// Envoie un texte, en réponse à `replyTo` s'il est donné. Le message provisoire arrive par
-    /// `messageEvents` (`.new`), puis `.sendSucceeded` ou `.sendFailed`.
-    func sendText(_ text: String, chatId: Int64, replyTo: Int64?) async throws
+    /// Envoie un texte, en réponse à `replyTo` s'il est donné, et renvoie l'identifiant
+    /// provisoire du message. Le message provisoire arrive aussi par `messageEvents` (`.new`),
+    /// puis `.sendSucceeded` ou `.sendFailed` avec cet identifiant en `oldId`.
+    func sendText(_ text: String, chatId: Int64, replyTo: Int64?) async throws -> Int64
     func editText(_ text: String, chatId: Int64, messageId: Int64) async throws
     /// `forEveryone` : supprime aussi chez les autres participants, si Telegram le permet.
     func deleteMessages(chatId: Int64, ids: [Int64], forEveryone: Bool) async throws
@@ -44,7 +45,8 @@ protocol ConversationService: AnyObject, Sendable {
     /// Télécharge entièrement le fichier et renvoie son état final (chemin local).
     func downloadFile(_ fileId: Int) async throws -> FileRef
     /// Envoie un vocal enregistré (fichier local) ; `waveform` en 5 bits par échantillon.
-    func sendVoiceNote(chatId: Int64, file: URL, duration: Int, waveform: Data, replyTo: Int64?) async throws
+    /// Renvoie l'identifiant provisoire du message, comme `sendText`.
+    func sendVoiceNote(chatId: Int64, file: URL, duration: Int, waveform: Data, replyTo: Int64?) async throws -> Int64
     /// Signale sa propre activité (« écrit… ») ; `nil` l'annule.
     func setActivity(chatId: Int64, _ activity: ChatActivity?) async throws
 }

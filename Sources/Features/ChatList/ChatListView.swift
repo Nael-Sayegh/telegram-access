@@ -13,11 +13,13 @@ struct ChatListView: View {
     @State private var model: ChatListViewModel
     @State private var confirmsLogout = false
     @Namespace private var rotorNamespace
-    private let service: any ChatListService
+    private let service: any TelegramService
+    private let hub: MessageHub
 
-    init(auth: AuthViewModel, store: ChatStore, service: any ChatListService) {
+    init(auth: AuthViewModel, store: ChatStore, hub: MessageHub, service: any TelegramService) {
         self.auth = auth
         self.service = service
+        self.hub = hub
         _model = State(initialValue: ChatListViewModel(list: .main, store: store, service: service))
     }
 
@@ -36,7 +38,7 @@ struct ChatListView: View {
         .navigationDestination(for: ChatRoute.self) { route in
             switch route {
             case .chat(let chatId):
-                ConversationPlaceholderView(title: title(of: chatId))
+                ConversationView(chatId: chatId, store: model.store, hub: hub, service: service)
             case .archive:
                 ArchiveView(store: model.store, service: service)
             case .search:
@@ -139,11 +141,6 @@ struct ChatListView: View {
         let total = max(counts?.total ?? 0, loaded)
         guard total > 0 else { return nil }
         return ChatActionLabels.archiveRow(total: total, unread: counts?.unread ?? 0)
-    }
-
-    private func title(of chatId: Int64) -> String {
-        let state = model.store.state
-        return state.chats[chatId].map { state.displayTitle(of: $0) } ?? "Conversation"
     }
 }
 
@@ -372,18 +369,5 @@ struct IconText: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .accessibilityElement(children: .combine)
-    }
-}
-
-/// Conversation : écran provisoire, l'écran complet arrive en phase 3.
-struct ConversationPlaceholderView: View {
-    let title: String
-
-    var body: some View {
-        List {
-            Text("L'affichage des messages sera disponible dans une prochaine version.")
-        }
-        .navigationTitle(title)
-        .navigationBarTitleDisplayMode(.inline)
     }
 }

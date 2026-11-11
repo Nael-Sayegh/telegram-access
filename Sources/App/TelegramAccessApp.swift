@@ -74,8 +74,8 @@ struct RootView: View {
         case .unsupported(let description):
             UnsupportedStepView(description: description) { auth.editPhoneNumber() }
         case .ready:
-            if let store = auth.chats, let service = auth.chatService {
-                ChatListView(auth: auth, store: store, service: service)
+            if let store = auth.chats, let hub = auth.messages, let service = auth.chatService {
+                ChatListView(auth: auth, store: store, hub: hub, service: service)
             } else {
                 ProgressView("Connexion à Telegram…")
                     .navigationTitle(Self.appName)

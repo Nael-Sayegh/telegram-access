@@ -132,18 +132,49 @@ actor UITestAuthService: TelegramService {
         return MessageSearchPage(results: results, nextOffset: "")
     }
 
-    // Messages : historique vide en attendant l'écran de conversation (lot 2).
+    // MARK: - Messages
+
+    /// Identifiant provisoire du prochain message envoyé (après tous ceux des conversations).
+    private var nextMessageId: Int64 = 1000
+
     func openChat(_ chatId: Int64) {}
     func closeChat(_ chatId: Int64) {}
-    func history(chatId: Int64, from fromMessageId: Int64, offset: Int, limit: Int) -> [ChatMessage] { [] }
+
+    /// Comme TDLib : du plus récent au plus ancien, à partir de `fromMessageId` (inclus).
+    /// Les conversations factices sont courtes : un décalage négatif renvoie tout.
+    func history(chatId: Int64, from fromMessageId: Int64, offset: Int, limit: Int) -> [ChatMessage] {
+        let all = UITestChatData.conversation(chatId).sorted { $0.id > $1.id }
+        if fromMessageId == 0 || offset < 0 {
+            return Array(all.prefix(limit))
+        }
+        return Array(all.filter { $0.id <= fromMessageId }.prefix(limit))
+    }
 
     func message(chatId: Int64, id: Int64) throws -> ChatMessage {
-        throw TelegramError(code: 404, message: "Not Found")
+        guard let message = UITestChatData.conversation(chatId).first(where: { $0.id == id }) else {
+            throw TelegramError(code: 404, message: "Not Found")
+        }
+        return message
     }
 
     func capabilities(chatId: Int64, messageId: Int64) -> MessageCapabilities { MessageCapabilities() }
     func viewMessages(chatId: Int64, ids: [Int64]) {}
-    func sendText(_ text: String, chatId: Int64, replyTo: Int64?) {}
+
+    /// Message provisoire puis envoi réussi, comme TDLib.
+    func sendText(_ text: String, chatId: Int64, replyTo: Int64?) -> Int64 {
+        let temporaryId = nextMessageId
+        nextMessageId += 1
+        let pending = UITestChatData.message(
+            temporaryId, chatId: chatId, text, from: UITestChatData.myUserId, at: Date(), delivery: .pending
+        )
+        messageContinuation.yield(.new(pending))
+        let sent = UITestChatData.message(
+            temporaryId + 1_000_000, chatId: chatId, text, from: UITestChatData.myUserId, at: Date()
+        )
+        messageContinuation.yield(.sendSucceeded(sent, oldId: temporaryId))
+        return temporaryId
+    }
+
     func editText(_ text: String, chatId: Int64, messageId: Int64) {}
     func deleteMessages(chatId: Int64, ids: [Int64], forEveryone: Bool) {}
     func forwardMessages(_ ids: [Int64], from chatId: Int64, to targetChatId: Int64) {}
@@ -153,7 +184,11 @@ actor UITestAuthService: TelegramService {
     func messageLink(chatId: Int64, messageId: Int64) -> String { "https://t.me/c/1/\(messageId)" }
     func resendMessages(chatId: Int64, ids: [Int64]) {}
     func downloadFile(_ fileId: Int) -> FileRef { FileRef(id: fileId, size: 0, localPath: nil) }
-    func sendVoiceNote(chatId: Int64, file: URL, duration: Int, waveform: Data, replyTo: Int64?) {}
+    func sendVoiceNote(chatId: Int64, file: URL, duration: Int, waveform: Data, replyTo: Int64?) -> Int64 {
+        nextMessageId += 1
+        return nextMessageId - 1
+    }
+
     func setActivity(chatId: Int64, _ activity: ChatActivity?) {}
 }
 
@@ -174,14 +209,97 @@ enum UITestChatData {
         Calendar.current.date(byAdding: .day, value: -1, to: todayMorning) ?? Date()
     }
 
+    /// Il y a `daysAgo` jours, à l'heure donnée.
+    static func time(daysAgo: Int, _ hour: Int, _ minute: Int) -> Date {
+        let calendar = Calendar.current
+        let day = calendar.date(byAdding: .day, value: -daysAgo, to: Date()) ?? Date()
+        return calendar.date(bySettingHour: hour, minute: minute, second: 0, of: day) ?? day
+    }
+
+    /// Conversation avec Marie : hier (question, réponse lue, vocal écouté), aujourd'hui trois
+    /// messages non lus (dernier lu : 10), dont une réponse à un message envoyé.
+    static var marieConversation: [ChatMessage] {
+        [
+            message(8, chatId: 1, "Tu as vu le programme de samedi ?", from: marie, at: time(daysAgo: 1, 18, 30)),
+            message(9, chatId: 1, "Pas encore, je regarde ce soir.", from: myUserId, at: time(daysAgo: 1, 18, 45)),
+            message(
+                10, chatId: 1, "", from: marie, at: time(daysAgo: 1, 19, 0),
+                content: .voiceNote(duration: 12, caption: ""),
+                media: MessageMedia(kind: .voiceNote, file: FileRef(id: 1, size: 20_000, localPath: nil))
+            ),
+            message(11, chatId: 1, "Bonjour !", from: marie, at: time(daysAgo: 0, 8, 50)),
+            message(12, chatId: 1, "Alors, tu l'as regardé ?", from: marie, at: time(daysAgo: 0, 9, 0), replyTo: 9),
+            message(13, chatId: 1, "On se voit demain ?", from: marie, at: todayMorning),
+        ]
+    }
+
+    /// Groupe Famille : avant-hier une question et sa réponse, hier un message non lu de Paul.
+    static var familyConversation: [ChatMessage] {
+        [
+            message(1, chatId: -100, "Qui vient samedi ?", from: marie, at: time(daysAgo: 2, 18, 0)),
+            message(2, chatId: -100, "Moi !", from: myUserId, at: time(daysAgo: 2, 18, 10)),
+            message(3, chatId: -100, "Salut à tous", from: paul, at: yesterday),
+        ]
+    }
+
+    /// Messages d'une conversation, du plus ancien au plus récent : Marie et Famille ont un
+    /// historique, les autres seulement leur dernier message.
+    static func conversation(_ chatId: Int64) -> [ChatMessage] {
+        switch chatId {
+        case 1:
+            return marieConversation
+        case -100:
+            return familyConversation
+        default:
+            guard let last = chats.first(where: { $0.id == chatId })?.lastMessage else { return [] }
+            return [ChatMessage(
+                id: last.id,
+                chatId: chatId,
+                sender: last.sender,
+                isOutgoing: last.isOutgoing,
+                date: last.date,
+                body: MessageBody(content: last.content),
+                delivery: last.delivery
+            )]
+        }
+    }
+
+    /// Message d'une conversation ; envoyé si `sender` est soi-même.
+    static func message(
+        _ id: Int64,
+        chatId: Int64,
+        _ text: String,
+        from sender: Int64,
+        at date: Date,
+        delivery: MessageDeliveryState = .sent,
+        replyTo: Int64? = nil,
+        content: MessageContentSummary? = nil,
+        media: MessageMedia? = nil
+    ) -> ChatMessage {
+        ChatMessage(
+            id: id,
+            chatId: chatId,
+            sender: sender < 0 ? .chat(sender) : .user(sender),
+            isOutgoing: sender == myUserId,
+            date: date,
+            body: MessageBody(content: content ?? .text(text), media: media),
+            replyTo: replyTo.map { MessageReplyRef(chatId: chatId, messageId: $0) },
+            delivery: delivery
+        )
+    }
+
+    private static func lastPreview(_ messages: [ChatMessage]) -> MessagePreview {
+        messages[messages.count - 1].preview
+    }
+
     static var chats: [ChatSummary] {
         [
             chat(42, kind: .user(userId: myUserId), title: "Moi", order: 100, pinned: true,
                  message: message(1, "Liste de courses", sender: myUserId, outgoing: true)),
             chat(1, kind: .user(userId: marie), title: "Marie Dupont", order: 90, unread: 3,
-                 message: message(2, "On se voit demain ?", sender: marie)),
+                 message: lastPreview(marieConversation), lastReadInbox: 10, lastReadOutbox: 9),
             chat(-100, kind: .supergroup, title: "Famille", order: 80, unread: 1, mentions: 1,
-                 message: message(3, "Salut à tous", sender: paul, date: yesterday)),
+                 message: lastPreview(familyConversation), lastReadInbox: 2),
             chat(-200, kind: .channel, title: "Infos", order: 70, muted: true,
                  message: message(4, "Nouvelle version", sender: -200, date: yesterday)),
             chat(2, kind: .secret(secretChatId: 3, userId: marie), title: "Marie Dupont", order: 60,
@@ -240,6 +358,7 @@ enum UITestChatData {
         muted: Bool = false,
         draft: DraftSummary? = nil,
         message: MessagePreview,
+        lastReadInbox: Int64 = 0,
         lastReadOutbox: Int64 = 0
     ) -> ChatSummary {
         var positions: [ChatListPosition] = []
@@ -255,7 +374,7 @@ enum UITestChatData {
             unreadMentionCount: mentions,
             unreadReactionCount: 0,
             isMarkedAsUnread: markedUnread,
-            lastReadInboxMessageId: 0,
+            lastReadInboxMessageId: lastReadInbox,
             lastReadOutboxMessageId: lastReadOutbox,
             muteSetting: ChatMuteSetting(usesDefault: !muted, muteFor: muted ? Int(Int32.max) : 0),
             draft: draft,
