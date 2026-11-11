@@ -27,6 +27,40 @@ struct ConversationSection: Identifiable, Equatable {
     }
 }
 
+/// Ligne de la liste des messages, dans l'ordre de lecture VoiceOver : début de la
+/// conversation, puis pour chaque jour son titre suivi de ses messages. Les titres de jour
+/// sont des lignes ordinaires (pas des en-têtes « collants ») : balayer à droite donne
+/// toujours l'élément suivant, à gauche le précédent, sans saut.
+enum ConversationItem: Identifiable, Equatable {
+    /// « Début de la conversation. », une fois le premier message chargé.
+    case start
+    case day(id: Date, title: String)
+    case message(MessageRowModel)
+
+    enum ID: Hashable {
+        case start
+        case day(Date)
+        case message(Int64)
+    }
+
+    var id: ID {
+        switch self {
+        case .start: return .start
+        case .day(let day, _): return .day(day)
+        case .message(let row): return .message(row.id)
+        }
+    }
+
+    static func list(_ sections: [ConversationSection], showsStart: Bool) -> [ConversationItem] {
+        var items: [ConversationItem] = showsStart ? [.start] : []
+        for section in sections {
+            items.append(.day(id: section.id, title: section.title))
+            items += section.rows.map { .message($0) }
+        }
+        return items
+    }
+}
+
 /// Demande d'amener un message à l'écran et d'y placer le focus VoiceOver. Réservée aux
 /// actions de l'utilisateur (ouverture, « Aller au premier message non lu ») : un message
 /// entrant ne déplace jamais le focus.
@@ -121,6 +155,11 @@ final class ConversationViewModel {
         let conversation = state
         let rows = conversation.orderedMessages.map { list.messageRow($0, in: chat, conversation: conversation) }
         return ConversationSection.make(rows, now: Date(), calendar: .current)
+    }
+
+    /// Lignes de la liste : début de la conversation, jours et messages, dans l'ordre.
+    var items: [ConversationItem] {
+        ConversationItem.list(sections, showsStart: state.reachedOldest && !state.orderedIds.isEmpty)
     }
 
     /// Faux tant que le brouillon est vide (espaces compris) : le bouton Envoyer est estompé.

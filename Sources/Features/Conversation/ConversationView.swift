@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Écran d'une conversation : messages (liste UIKit), barre de rédaction en bas, boutons de
-/// saut dans la barre du haut (ordre VoiceOver : Retour, titre, premier non lu, dernier
+/// Écran d'une conversation : messages (`MessageListView`), barre de rédaction en bas, boutons
+/// de saut dans la barre du haut (ordre VoiceOver : Retour, titre, premier non lu, dernier
 /// message, puis les messages et la barre de rédaction).
 struct ConversationView: View {
     @State private var model: ConversationViewModel
@@ -11,12 +11,7 @@ struct ConversationView: View {
     }
 
     var body: some View {
-        MessageList(
-            sections: model.sections,
-            focus: model.focusRequest,
-            scrollToBottomRequest: model.scrollToBottomRequest,
-            model: model
-        )
+        MessageListView(model: model)
             .overlay { statusOverlay }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 ComposerBar(model: model)
@@ -72,31 +67,6 @@ struct ConversationView: View {
                 Label("Aller au dernier message", systemImage: "arrow.down.to.line")
             }
         }
-    }
-}
-
-/// Liste UIKit des messages (`ConversationViewController`), alimentée par le modèle.
-/// Les sections et la demande de focus sont passées en paramètres : la vue parente est
-/// réévaluée quand elles changent, ce qui met la liste à jour.
-private struct MessageList: UIViewControllerRepresentable {
-    let sections: [ConversationSection]
-    let focus: MessageFocusRequest?
-    let scrollToBottomRequest: Int
-    let model: ConversationViewModel
-
-    func makeUIViewController(context: Context) -> ConversationViewController {
-        let controller = ConversationViewController()
-        controller.onMessageAppear = { [weak model] id in
-            model?.messageAppeared(id)
-        }
-        controller.onVisibleMessages = { [weak model] ids in
-            model?.messagesVisible(ids)
-        }
-        return controller
-    }
-
-    func updateUIViewController(_ controller: ConversationViewController, context: Context) {
-        controller.update(sections: sections, focus: focus, scrollToBottomRequest: scrollToBottomRequest)
     }
 }
 

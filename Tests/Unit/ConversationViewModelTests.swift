@@ -236,6 +236,23 @@ final class ConversationSectionTests: XCTestCase {
         XCTAssertEqual(sections.map { $0.rows.map(\.id) }, [[1, 2], [3]])
     }
 
+    /// Lignes de la liste dans l'ordre de lecture : début, puis chaque jour suivi de ses messages.
+    func testItemsFollowReadingOrder() {
+        let rows = [
+            row(1, ChatTestData.date(2026, 11, 9, 18, 0)),
+            row(2, ChatTestData.date(2026, 11, 10, 9, 0)),
+            row(3, ChatTestData.date(2026, 11, 10, 9, 30)),
+        ]
+        let sections = ConversationSection.make(rows, now: ChatTestData.now, calendar: calendar)
+        let items = ConversationItem.list(sections, showsStart: true)
+        XCTAssertEqual(items.map(\.id), [
+            .start,
+            .day(sections[0].id), .message(1),
+            .day(sections[1].id), .message(2), .message(3),
+        ])
+        XCTAssertEqual(ConversationItem.list(sections, showsStart: false).first?.id, .day(sections[0].id))
+    }
+
     /// Un message daté hors de l'ordre ne recrée pas un jour déjà présent (identifiants de
     /// section uniques, exigés par la liste).
     func testOutOfOrderDateDoesNotDuplicateADay() {

@@ -65,17 +65,49 @@ final class ConversationAccessibilityTests: XCTestCase {
         XCTAssertTrue(element(app, "Hier").waitForExistence(timeout: 5), "En-tête d'hier absent")
     }
 
-    /// Audit complet, sauf taille du texte et texte coupé : chaque message est un élément porté
-    /// par une cellule UIKit dont le texte est dans une bulle SwiftUI, et l'audit signale alors
-    /// tous les messages et en-têtes sans pouvoir les identifier (« élément inconnu »), que
-    /// l'élément soit la cellule ou la bulle (essayé le 2026-11-11). La taille du texte est
-    /// contrôlée par `testMessagesGrowWithTextSize`.
+    /// Comme WhatsApp : balayer donne chaque élément dans l'ordre chronologique, sans en
+    /// sauter — début de la conversation, jour, messages du jour, jour suivant…
+    @MainActor
+    func testMessagesAreReadInChronologicalOrder() throws {
+        let app = openMarie()
+        let expected = [
+            "Début de la conversation.",
+            "Hier",
+            "Tu as vu le programme de samedi ?, 18 h 30",
+            "Vous, Pas encore, je regarde ce soir., 18 h 45, lu",
+            "Message vocal, 12 secondes, 19 h",
+            "Aujourd'hui",
+            Self.firstUnread,
+            "Alors, tu l'as regardé ?, en réponse à votre message : Pas encore, je regarde ce soir., 9 h",
+            "On se voit demain ?, 9 h 05",
+        ]
+        XCTAssertTrue(element(app, "Début de la conversation.").waitForExistence(timeout: 5), "Début non signalé")
+        var order: [String] = []
+        for label in app.descendants(matching: .any).allElementsBoundByIndex.map(\.label)
+        where expected.contains(label) && !order.contains(label) {
+            order.append(label)
+        }
+        XCTAssertEqual(order, expected)
+    }
+
+    /// Audit complet, sauf taille du texte et texte coupé, que l'audit n'arrivait pas à évaluer
+    /// dans l'ancienne liste UIKit (« élément inconnu », 2026-11-11) : contrôlés par
+    /// `testMessagesGrowWithTextSize`. Avec la liste SwiftUI, ces deux contrôles sont lancés à
+    /// titre d'information (journal du test) pour décider de les réactiver.
     @MainActor
     func testConversationScreen() throws {
         let app = openMarie()
         XCTAssertTrue(app.buttons["Aller au premier message non lu"].exists)
         XCTAssertTrue(app.buttons["Aller au dernier message"].exists)
         try AccessibilityAudit.run(app, excluding: [.dynamicType, .textClipped])
+
+        var reported = 0
+        try app.performAccessibilityAudit(for: [.dynamicType, .textClipped]) { issue in
+            reported += 1
+            print("Audit Dynamic Type (information) : \(issue.compactDescription) — \(issue.element?.label ?? "élément inconnu")")
+            return true
+        }
+        print("Audit Dynamic Type (information) : \(reported) problème(s) signalé(s).")
     }
 
     /// Dynamic Type : en très grande taille de texte (accessibilité XXXL), un message est

@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Bulle d'un message, pour l'affichage. VoiceOver ne la parcourt pas : la cellule qui la
-/// contient est un seul élément, avec le libellé complet du message.
+/// Bulle d'un message, pour l'affichage. VoiceOver ne la parcourt pas en détail :
+/// `MessageListView` en fait un seul élément, avec le libellé complet du message.
 ///
 /// Couleurs : message envoyé en texte « fond système » sur la couleur d'accent (blanc sur bleu
 /// foncé en clair, noir sur bleu clair en sombre : contraste suffisant dans les deux modes),

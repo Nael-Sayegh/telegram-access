@@ -10,7 +10,7 @@
 
 | Sujet | Choix | Raison |
 |---|---|---|
-| Langage / UI | **Swift + SwiftUI**, UIKit pour l'écran de conversation | Meilleur support VoiceOver natif |
+| Langage / UI | **Swift + SwiftUI** (y compris la liste des messages : une `UICollectionView` essayée donnait sous VoiceOver un parcours désordonné, 2026-11-11) | Meilleur support VoiceOver natif |
 | Accès Telegram | **TDLib** via [TDLibKit](https://github.com/Swiftgram/TDLibKit) (SPM) | MTProto, chiffrement, synchro, base locale chiffrée gérés officiellement |
 | Architecture | MVVM, `actor TelegramClient`, async/await, `AsyncStream` des updates | Isolation, testabilité |
 | Projet Xcode | **XcodeGen** (`project.yml`), `.xcodeproj` non versionné | Éditable sous Windows |
@@ -104,7 +104,7 @@ XcodeGen est téléchargé dans une version figée et vérifié par empreinte SH
 ## Phase 3 — Conversation (4 à 5 semaines, cœur de l'app)
 
 **Rendu**
-- `UICollectionView` (stabilité du focus lors du chargement de l'historique).
+- Liste SwiftUI à identifiants stables (focus conservé lors du chargement de l'historique), titres de jour en lignes ordinaires : parcours VoiceOver dans l'ordre chronologique, sans saut, comme WhatsApp. (Une `UICollectionView`, prévue à l'origine, donnait à l'essai un parcours désordonné.)
 - Libellé : « [Auteur | Vous], [contenu], [heure], [envoyé / lu / modifié] » ; auteur omis en tête-à-tête.
 - Réponses : « En réponse à Paul : … ».
 - Médias : « Photo », « Vidéo, 1 minute 20 », « Message vocal, 12 secondes », « Fichier PDF, 2 Mo » ; stickers → émoji associé.
@@ -228,6 +228,8 @@ telegram-access/                  # dépôt GitHub privé
 - 2026-11-11, phase 3 (branche `phase-3`), lot 1 : plomberie des messages — flux `messageEvents` né avec le client et redistribué par `MessageHub` (aucun message perdu entre l'abonnement d'un écran et le chargement de son historique), conversion TDLib (contenu, liens en UTF-16, mentions, médias, réponse, transfert, réactions, état d'envoi), service `ConversationService` (historique, envoi, modification, suppression, transfert, épinglage, réactions, lien, renvoi, téléchargement, vocal, « écrit… »), réducteur `ConversationState` (fenêtre contiguë paginée dans les deux sens, message provisoire remplacé à l'envoi), libellés VoiceOver d'un message (« Paul Martin, D'accord, en réponse à votre message : …, 14 h 32, lu, modifié, réactions : 👍 2 dont vous »), en-têtes de jour, activité ; liens : action nommée d'après la vraie destination, web / Telegram / courriel ouverts directement, autre app (`tel:`, `sms:`, raccourcis…) après confirmation montrant la destination complète, `javascript:` / `file:` / `data:` jamais ouverts ; tests unitaires. CI : lancement manuel possible sans tests UI.
 
 - 2026-11-11, phase 3, lot 2 : écran de conversation — `UICollectionView` à identifiants stables (focus conservé quand l'historique s'insère au-dessus ou qu'un message arrive, position visuelle conservée), en-têtes de jour annoncés comme en-têtes, un message = un élément VoiceOver, ouverture au premier non lu (fenêtre autour du dernier lu) ou en bas avec focus sur ce message, pagination dans les deux sens, messages vus signalés après 0,5 s d'immobilité, boutons « Aller au premier message non lu » / « Aller au dernier message », barre de rédaction (champ multiligne, Envoyer estompé tant que le champ est vide, « écrit… » au-dessus du champ), annonce « Message envoyé. » ou raison de l'échec (texte conservé), jamais de défilement automatique sous VoiceOver. Tests unitaires du modèle de vue et tests UI (libellés, audit, envoi). CI : attente d'un simulateur iPhone avant les tests.
+
+- 2026-11-11, essai sur iPhone du lot 2 : parcours VoiceOver de la liste des messages désordonné, différent selon le sens. Liste refaite en SwiftUI (`List`) : ordre de lecture = ordre chronologique, y compris hors de l'écran, titres de jour en lignes ordinaires (plus d'en-têtes collants), ligne « Début de la conversation. » en haut, position conservée quand l'historique s'insère au-dessus. Test UI de l'ordre de lecture ajouté.
 
 **Reste à faire côté compte (manuel)**
 - Rien de bloquant pour TestFlight (secrets `release` en place, envoi fonctionnel).
