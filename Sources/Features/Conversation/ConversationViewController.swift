@@ -65,6 +65,21 @@ final class ConversationViewController: UIViewController, UICollectionViewDelega
         dataSource.supplementaryViewProvider = { collectionView, _, indexPath in
             collectionView.dequeueConfiguredReusableSupplementary(using: headerRegistration, for: indexPath)
         }
+
+        // Taille du texte changée (Réglages, Centre de contrôle) : les bulles grandissent, les
+        // hauteurs des cellules doivent être recalculées, sinon le texte serait coupé.
+        registerForTraitChanges([UITraitPreferredContentSizeCategory.self]) { (self: Self, _: UITraitCollection) in
+            self.refreshAllCells()
+        }
+    }
+
+    /// Reconfigure toutes les cellules sur place (sans les recréer : le focus VoiceOver est
+    /// conservé) et recalcule la mise en page.
+    private func refreshAllCells() {
+        var snapshot = dataSource.snapshot()
+        snapshot.reconfigureItems(snapshot.itemIdentifiers)
+        dataSource.apply(snapshot, animatingDifferences: false)
+        collectionView.collectionViewLayout.invalidateLayout()
     }
 
     /// Le clavier réduit la hauteur de la liste : si l'on voyait le dernier message, on le
@@ -241,36 +256,51 @@ final class ConversationViewController: UIViewController, UICollectionViewDelega
 }
 
 /// Contenu et accessibilité des cellules de la liste des messages.
+///
+/// L'élément VoiceOver est posé dans le contenu SwiftUI, pas sur la cellule UIKit : une
+/// cellule qui porte un libellé sans contenir elle-même le texte est vue par l'audit
+/// d'accessibilité comme ne suivant pas la taille du texte (Dynamic Type), alors qu'un élément
+/// SwiftUI est contrôlé correctement. Pour VoiceOver, le résultat est le même : un message =
+/// un élément.
 @MainActor
 enum MessageCellConfigurator {
-    /// Bulle en SwiftUI ; la cellule est un seul élément VoiceOver dont le libellé donne tout
-    /// le message (auteur, contenu, réponse, heure, état…).
     static func configure(_ cell: UICollectionViewListCell, with row: MessageRowModel) {
+        let label = ConversationLabels.message(row, calendar: .current)
         cell.contentConfiguration = UIHostingConfiguration {
-            MessageBubble(row: row)
+            MessageBubble(row: row, accessibilityText: label)
         }
         .margins(.horizontal, 12)
         .margins(.vertical, 3)
         cell.backgroundConfiguration = UIBackgroundConfiguration.clear()
-        cell.isAccessibilityElement = true
-        cell.accessibilityLabel = ConversationLabels.message(row, calendar: .current)
-        cell.accessibilityTraits = .staticText
+        cell.isAccessibilityElement = false
     }
 
     /// En-tête de jour : centré, en couleur de texte principale (contraste), annoncé comme
-    /// en-tête.
+    /// en-tête ; fond opaque, car l'en-tête reste épinglé en haut pendant le défilement.
     static func configureHeader(_ header: UICollectionViewListCell, title: String) {
-        var content = UIListContentConfiguration.plainHeader()
-        content.text = title
-        content.textProperties.font = UIFont.preferredFont(forTextStyle: .subheadline)
-        content.textProperties.adjustsFontForContentSizeCategory = true
-        content.textProperties.color = .label
-        content.textProperties.alignment = .center
-        content.textProperties.numberOfLines = 0
-        header.contentConfiguration = content
+        header.contentConfiguration = UIHostingConfiguration {
+            DayHeader(title: title)
+        }
+        .margins(.horizontal, 12)
+        .margins(.vertical, 4)
         var background = UIBackgroundConfiguration.clear()
         background.backgroundColor = .systemBackground
         header.backgroundConfiguration = background
-        header.accessibilityTraits = .header
+        header.isAccessibilityElement = false
+    }
+}
+
+/// Titre d'un jour de la conversation (« Aujourd'hui », « Hier »…).
+private struct DayHeader: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(Color.primary)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity)
+            .accessibilityAddTraits(.isHeader)
     }
 }

@@ -1,13 +1,15 @@
 import SwiftUI
 
-/// Bulle d'un message, pour l'affichage. VoiceOver ne la parcourt pas : la cellule qui la
-/// contient est un seul élément, avec le libellé complet du message.
+/// Bulle d'un message. Pour VoiceOver, la ligne entière est un seul élément dont le libellé
+/// (`accessibilityText`, de `ConversationLabels.message`) donne tout le message : auteur,
+/// contenu, message cité, heure, état…
 ///
 /// Couleurs : message envoyé en texte « fond système » sur la couleur d'accent (blanc sur bleu
 /// foncé en clair, noir sur bleu clair en sombre : contraste suffisant dans les deux modes),
 /// message reçu en texte principal sur fond gris.
 struct MessageBubble: View {
     let row: MessageRowModel
+    let accessibilityText: String
     @Environment(\.dynamicTypeSize) private var typeSize
 
     private var textColor: Color {
@@ -57,6 +59,9 @@ struct MessageBubble: View {
                 Spacer(minLength: 48)
             }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(verbatim: accessibilityText))
+        .accessibilityAddTraits(.isStaticText)
     }
 
     /// « modifié · épinglé · 14:32 · lu »
