@@ -101,8 +101,8 @@ private struct MessageList: UIViewControllerRepresentable {
 }
 
 /// Barre de rédaction : activité des participants (« écrit… »), champ multiligne, bouton
-/// Envoyer à position fixe. Le bouton n'est jamais estompé : un message vide est signalé à
-/// l'activation (comme les écrans de connexion).
+/// Envoyer à position fixe, estompé tant que le champ est vide (VoiceOver : « Envoyer,
+/// estompé, bouton »).
 private struct ComposerBar: View {
     @Bindable var model: ConversationViewModel
     @ScaledMetric(relativeTo: .title2) private var sendIconSize: CGFloat = 32
@@ -135,11 +135,26 @@ private struct ComposerBar: View {
                         .frame(width: sendIconSize, height: sendIconSize)
                         .frame(minWidth: 44, minHeight: 44)
                 }
+                .buttonStyle(SendButtonStyle())
+                .disabled(!model.canSend)
                 .accessibilityLabel(model.isSending ? "Envoyer, en cours" : "Envoyer")
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(.bar)
+    }
+}
+
+/// Bouton Envoyer : bleu d'accent quand il est actif, gris quand il est estompé. Couleurs
+/// fixées ici plutôt que l'atténuation automatique d'iOS, pour garder un contraste suffisant
+/// (environ 5,7:1 en mode clair) : l'icône grise reste visible.
+private struct SendButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(isEnabled ? Color.accentColor : Color.primary.opacity(0.6))
+            .opacity(configuration.isPressed ? 0.7 : 1)
     }
 }

@@ -78,16 +78,21 @@ final class ConversationAccessibilityTests: XCTestCase {
         XCTAssertTrue(sent.label.hasSuffix(", envoyé"), sent.label)
     }
 
-    /// Un message vide n'est pas envoyé (le bouton reste actif, l'erreur est annoncée).
+    /// Envoyer est estompé tant que le champ est vide ou ne contient que des espaces.
     @MainActor
-    func testEmptyMessageIsNotSent() throws {
+    func testSendButtonIsDimmedWhileTheFieldIsEmpty() throws {
         let app = openMarie()
         let send = app.buttons["Envoyer"]
-        XCTAssertTrue(send.isEnabled, "Le bouton Envoyer n'est jamais estompé")
-        send.tap()
-        let sent = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label BEGINSWITH %@", "Vous, Message vide"))
+        XCTAssertTrue(send.exists)
+        XCTAssertFalse(send.isEnabled, "Champ vide : bouton estompé")
+
+        let field = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == %@ OR placeholderValue == %@", "Message", "Message"))
             .firstMatch
-        XCTAssertFalse(sent.waitForExistence(timeout: 2))
+        field.tap()
+        app.typeText("   ")
+        XCTAssertFalse(send.isEnabled, "Espaces seuls : bouton estompé")
+        app.typeText("Salut")
+        XCTAssertTrue(send.isEnabled)
     }
 }

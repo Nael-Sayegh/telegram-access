@@ -109,11 +109,16 @@ final class ConversationViewModelTests: XCTestCase {
     func testEmptyMessageIsNotSent() async {
         let (model, service) = await makeModel(pages: [[Fixture.message(10)]])
         await model.open()
+        XCTAssertFalse(model.canSend, "Bouton estompé : champ vide")
         model.draft = " \n "
+        XCTAssertFalse(model.canSend, "Bouton estompé : espaces seuls")
         model.send()
         XCTAssertEqual(model.lastAnnouncement, "Saisissez d'abord un message.")
         let calls = await service.messageCalls
         XCTAssertFalse(calls.contains { $0.hasPrefix("send") })
+
+        model.draft = "Salut"
+        XCTAssertTrue(model.canSend)
     }
 
     func testFailedSendKeepsTheTextAndAnnouncesTheReason() async {

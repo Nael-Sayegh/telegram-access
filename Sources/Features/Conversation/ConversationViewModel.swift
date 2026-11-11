@@ -123,6 +123,11 @@ final class ConversationViewModel {
         return ConversationSection.make(rows, now: Date(), calendar: .current)
     }
 
+    /// Faux tant que le brouillon est vide (espaces compris) : le bouton Envoyer est estompé.
+    var canSend: Bool {
+        !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     /// Vrai pour une conversation chargée sans aucun message.
     var isEmpty: Bool {
         state.isLoaded && state.orderedIds.isEmpty && state.reachedOldest
@@ -306,7 +311,8 @@ final class ConversationViewModel {
     // MARK: - Envoi
 
     /// Envoie le brouillon. « Message envoyé. » est annoncé quand Telegram l'accepte ; en cas
-    /// d'échec, la raison est annoncée et le texte remis dans le champ.
+    /// d'échec, la raison est annoncée et le texte remis dans le champ. Un brouillon vide est
+    /// signalé (le bouton est alors estompé, mais l'envoi pourra venir d'ailleurs : Magic Tap).
     func send() {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else {
