@@ -60,13 +60,17 @@ struct MessageListView: View {
     private func row(_ item: ConversationItem) -> some View {
         switch item {
         case .start:
+            // Toute première ligne, juste sous la barre du haut : iOS 26 y estompe le contenu
+            // (effet de bord de défilement). En gris et en petit, le texte échouait à l'audit
+            // de contraste : couleur principale, taille courante et marge sous la barre.
             Text("Début de la conversation.")
-                .font(.footnote)
-                .readableSecondary()
+                .font(.subheadline)
+                .foregroundStyle(Color.primary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
+                .padding(.top, 20)
+                .padding(.bottom, 8)
         case .day(_, let title):
             Text(title)
                 .font(.subheadline.weight(.semibold))
