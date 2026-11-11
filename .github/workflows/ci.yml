@@ -61,13 +61,37 @@ jobs:
           key: spm-${{ runner.os }}-${{ hashFiles('project.yml') }}
           restore-keys: spm-${{ runner.os }}-
 
+      # Au démarrage du runner, les simulateurs iOS sont parfois montés avec retard :
+      # xcodebuild n'en trouve alors aucun et échoue sans compiler (vu le 2026-11-11).
+      # On attend qu'un iPhone soit disponible (iPhone 17 de préférence), 5 minutes au plus.
+      - name: Attendre un simulateur iPhone
+        run: |
+          set -euo pipefail
+          udid=""
+          for attempt in $(seq 1 30); do
+            udid=$(xcrun simctl list --json devices available | jq -r '
+              [.devices | to_entries[] | select(.key | contains("iOS")) | .value[]
+                | select(.name | startswith("iPhone"))]
+              | (map(select(.name == "iPhone 17")) + .) | .[0].udid // empty' || true)
+            if [ -n "$udid" ]; then break; fi
+            echo "Aucun simulateur iPhone disponible (essai $attempt/30), nouvel essai dans 10 s."
+            sleep 10
+          done
+          if [ -z "$udid" ]; then
+            xcrun simctl list
+            echo "::error::Aucun simulateur iPhone disponible sur le runner."
+            exit 1
+          fi
+          xcrun simctl list devices available | grep "$udid"
+          echo "SIMULATOR_ID=$udid" >> "$GITHUB_ENV"
+
       - name: Tests
         run: |
           set -euo pipefail
           xcodebuild test \
             -project TelegramAccess.xcodeproj \
             -scheme "$SCHEME" \
-            -destination "platform=iOS Simulator,name=iPhone 17" \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
             -clonedSourcePackagesDirPath SourcePackages \
             -resultBundlePath build/TestResults.xcresult \
             -quiet \
