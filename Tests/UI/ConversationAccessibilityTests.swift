@@ -29,8 +29,16 @@ final class ConversationAccessibilityTests: XCTestCase {
             app.launchArguments += ["-UIPreferredContentSizeCategoryName", textSize]
         }
         app.launch()
+        XCTAssertTrue(app.navigationBars["Discussions"].waitForExistence(timeout: 15), "Liste absente")
+        // Aux grandes tailles de texte, les premières lignes (Archives, Messages enregistrés)
+        // remplissent l'écran : celle de Marie, plus bas, n'existe qu'une fois amenée à l'écran.
         let row = element(app, Self.marieRow)
-        XCTAssertTrue(row.waitForExistence(timeout: 15), "Ligne de Marie introuvable")
+        var swipes = 0
+        while !row.waitForExistence(timeout: 2), swipes < 6 {
+            app.swipeUp()
+            swipes += 1
+        }
+        XCTAssertTrue(row.exists, "Ligne de Marie introuvable")
         row.tap()
         XCTAssertTrue(element(app, Self.firstUnread).waitForExistence(timeout: 10), "Conversation non affichée")
         return app
