@@ -33,7 +33,7 @@ enum TDLibRuntime {
 }
 
 /// Enveloppe d'un client TDLib. Seul point de l'app qui importe TDLibKit (avec les conversions
-/// `AuthStep+TDLib` et `ChatListEvent+TDLib`).
+/// `AuthStep+TDLib`, `ChatListEvent+TDLib` et `MessageEvent+TDLib`).
 /// Un client fermé (`authorizationStateClosed`, après déconnexion) ne peut pas être réutilisé :
 /// il faut en créer un nouveau.
 actor TelegramClient: AuthService {
@@ -41,6 +41,8 @@ actor TelegramClient: AuthService {
     nonisolated let steps: AsyncStream<AuthStep>
     /// Changements de la liste des conversations, émis dès la création du client.
     nonisolated let chatEvents: AsyncStream<ChatListEvent>
+    /// Changements des messages de toutes les conversations, émis dès la création du client.
+    nonisolated let messageEvents: AsyncStream<MessageEvent>
 
     private let stepContinuation: AsyncStream<AuthStep>.Continuation
     private let rawStates: AsyncStream<AuthorizationState>
@@ -70,6 +72,10 @@ actor TelegramClient: AuthService {
         self.chatEvents = chatStream.stream
         let chatContinuation = chatStream.continuation
 
+        let messageStream = AsyncStream.makeStream(of: MessageEvent.self)
+        self.messageEvents = messageStream.stream
+        let messageContinuation = messageStream.continuation
+
         self.client = manager.createClient { data, client in
             guard let update = try? client.decoder.decode(Update.self, from: data) else { return }
             if case .updateAuthorizationState(let value) = update {
@@ -77,9 +83,12 @@ actor TelegramClient: AuthService {
                 if case .authorizationStateClosed = value.authorizationState {
                     rawContinuation.finish()
                     chatContinuation.finish()
+                    messageContinuation.finish()
                 }
             } else if let event = ChatListEvent(update) {
                 chatContinuation.yield(event)
+            } else if let event = MessageEvent(update) {
+                messageContinuation.yield(event)
             }
         }
         TDLibRuntime.configureLogging(using: self.client)

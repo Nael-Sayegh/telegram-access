@@ -175,24 +175,13 @@ extension DraftSummary {
 
 extension MessagePreview {
     init(_ message: Message) {
-        let sender: MessageSenderRef
-        switch message.senderId {
-        case .messageSenderUser(let value): sender = .user(value.userId)
-        case .messageSenderChat(let value): sender = .chat(value.chatId)
-        }
-        let delivery: MessageDeliveryState
-        switch message.sendingState {
-        case .messageSendingStatePending?: delivery = .pending
-        case .messageSendingStateFailed?: delivery = .failed
-        case nil: delivery = .sent
-        }
         self.init(
             id: message.id,
-            sender: sender,
+            sender: MessageSenderRef(message.senderId),
             isOutgoing: message.isOutgoing,
             date: Date(timeIntervalSince1970: TimeInterval(message.date)),
             content: MessageContentSummary(message.content),
-            delivery: delivery
+            delivery: MessageDeliveryState(message.sendingState)
         )
     }
 }

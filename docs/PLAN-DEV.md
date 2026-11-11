@@ -1,6 +1,6 @@
 # Plan de développement — Client Telegram accessible VoiceOver (iPhone)
 
-> Dernière mise à jour : 2026-11-10
+> Dernière mise à jour : 2026-11-11
 > Objectifs : connexion par numéro de téléphone, accessibilité lecteur d'écran prioritaire, sécurité des communications.
 > Contraintes : dépôt Git **privé** sur GitHub, développement sous Windows, **compilation / signature / upload via GitHub Actions macOS**.
 
@@ -224,6 +224,9 @@ telegram-access/                  # dépôt GitHub privé
 
 - 2026-11-10, phase 2 (branche `phase-2`) : liste des conversations alimentée par les updates TDLib (store créé avec le client, aucun `updateNewChat` perdu), une ligne = un élément VoiceOver (« Marie Dupont, 3 non lus, dernier message : …, 14 h 32 », « conversation secrète » dans le libellé, médias décrits), contenu secondaire (épinglée, sourdine, brouillon, type) dans « Plus de contenu », pagination, état de connexion annoncé seulement s'il dure ; actions personnalisées (lu / non lu, épingler, notifications, archiver, supprimer ou quitter avec confirmation), balayage hors VoiceOver ; écran Archives ; filtres Tous / Non lus / Personnes / Groupes / Chaînes dans un menu « Filtre » (« Filtre : Non lus ») ; rotors Non lus, Mentions, Épinglées ; recherche sur un écran dédié ouvert par le bouton « Rechercher », dans les messages (par défaut, paginés) ou parmi les conversations (y compris groupes et chaînes publics), résultat annoncé une fois. Barre du haut lue dans un ordre constant : Options, Discussions, Rechercher, Filtre (titre toujours dans la barre ; pas de `.searchable`, placé en bas de l'écran par iOS 26). Mention « client non officiel » dans le menu Options. Tests unitaires (réducteur, libellés, modèles de vue) et tests UI avec conversations factices. Conversation : écran provisoire (phase 3).
 
+- 2026-11-11 : phase 2 fusionnée dans `main` ; confirmations (suppression, déconnexion) en alertes pour que « Annuler » reste visible sous iOS 26.
+- 2026-11-11, phase 3 (branche `phase-3`), lot 1 : plomberie des messages — flux `messageEvents` né avec le client et redistribué par `MessageHub` (aucun message perdu entre l'abonnement d'un écran et le chargement de son historique), conversion TDLib (contenu, liens en UTF-16, mentions, médias, réponse, transfert, réactions, état d'envoi), service `ConversationService` (historique, envoi, modification, suppression, transfert, épinglage, réactions, lien, renvoi, téléchargement, vocal, « écrit… »), réducteur `ConversationState` (fenêtre contiguë paginée dans les deux sens, message provisoire remplacé à l'envoi), libellés VoiceOver d'un message (« Paul Martin, D'accord, en réponse à votre message : …, 14 h 32, lu, modifié, réactions : 👍 2 dont vous »), en-têtes de jour, activité ; liens : action nommée d'après la vraie destination, web / Telegram / courriel ouverts directement, autre app (`tel:`, `sms:`, raccourcis…) après confirmation montrant la destination complète, `javascript:` / `file:` / `data:` jamais ouverts ; tests unitaires. CI : lancement manuel possible sans tests UI.
+
 **Reste à faire côté compte (manuel)**
 - Rien de bloquant pour TestFlight (secrets `release` en place, envoi fonctionnel).
 - Avant de rendre l'app disponible en France sur l'App Store : déclaration ANSSI, envoi dans App Store Connect, puis `ITSAppUsesNonExemptEncryption = YES` + `ITSEncryptionExportComplianceCode` (voir `docs/CONFIGURATION.md`).
@@ -232,4 +235,4 @@ telegram-access/                  # dépôt GitHub privé
 - Nom affiché définitif (provisoire : « Accessigram », dans `Config/Base.xcconfig`) — doit respecter les conditions de Telegram.
 - Push chiffrées (phase 6) : l'extension de notification doit lire la base TDLib appareil verrouillé, ce qui est incompatible avec `completeUnlessOpen` et la clé `WhenUnlockedThisDeviceOnly` → choisir avant la phase 6 (ex. `completeUntilFirstUserAuthentication` + `AfterFirstUnlockThisDeviceOnly` en App Group, avec migration de la clé).
 
-**Prochaine étape** : CI de la branche `phase-2` (nouveaux tests UI), test VoiceOver sur iPhone de la recherche et des rotors (dont lignes hors écran) et du focus quand une conversation remonte en tête, PR vers `main`, puis phase 3 (conversation).
+**Prochaine étape** : CI du lot 1 de la phase 3 (tests unitaires seuls), puis lot 2 : écran de conversation (`UICollectionView`, sections par jour, pagination, envoi de texte, saut au premier non lu).

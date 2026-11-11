@@ -52,7 +52,7 @@ struct ChatListPosition: Equatable {
 }
 
 /// Auteur d'un message : un utilisateur, ou un chat (chaîne, groupe anonyme).
-enum MessageSenderRef: Equatable {
+enum MessageSenderRef: Hashable {
     case user(Int64)
     case chat(Int64)
 }

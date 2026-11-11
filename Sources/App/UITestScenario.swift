@@ -60,7 +60,10 @@ enum UITestScenario: String, CaseIterable {
 actor UITestAuthService: TelegramService {
     nonisolated let steps: AsyncStream<AuthStep>
     nonisolated let chatEvents: AsyncStream<ChatListEvent>
+    nonisolated let messageEvents: AsyncStream<MessageEvent>
     private let continuation: AsyncStream<AuthStep>.Continuation
+    /// Gardée pour que le flux des messages reste ouvert.
+    private let messageContinuation: AsyncStream<MessageEvent>.Continuation
     private let scenario: UITestScenario
 
     init(scenario: UITestScenario) {
@@ -69,6 +72,9 @@ actor UITestAuthService: TelegramService {
         self.continuation = stream.continuation
         let chatStream = AsyncStream.makeStream(of: ChatListEvent.self)
         self.chatEvents = chatStream.stream
+        let messageStream = AsyncStream.makeStream(of: MessageEvent.self)
+        self.messageEvents = messageStream.stream
+        self.messageContinuation = messageStream.continuation
         self.scenario = scenario
         // Mis en mémoire tampon par le flux jusqu'à ce que le store le lise.
         if scenario == .ready {
@@ -125,6 +131,30 @@ actor UITestAuthService: TelegramService {
         }
         return MessageSearchPage(results: results, nextOffset: "")
     }
+
+    // Messages : historique vide en attendant l'écran de conversation (lot 2).
+    func openChat(_ chatId: Int64) {}
+    func closeChat(_ chatId: Int64) {}
+    func history(chatId: Int64, from fromMessageId: Int64, offset: Int, limit: Int) -> [ChatMessage] { [] }
+
+    func message(chatId: Int64, id: Int64) throws -> ChatMessage {
+        throw TelegramError(code: 404, message: "Not Found")
+    }
+
+    func capabilities(chatId: Int64, messageId: Int64) -> MessageCapabilities { MessageCapabilities() }
+    func viewMessages(chatId: Int64, ids: [Int64]) {}
+    func sendText(_ text: String, chatId: Int64, replyTo: Int64?) {}
+    func editText(_ text: String, chatId: Int64, messageId: Int64) {}
+    func deleteMessages(chatId: Int64, ids: [Int64], forEveryone: Bool) {}
+    func forwardMessages(_ ids: [Int64], from chatId: Int64, to targetChatId: Int64) {}
+    func setMessagePinned(chatId: Int64, messageId: Int64, _ isPinned: Bool) {}
+    func availableReactions(chatId: Int64, messageId: Int64) -> [ReactionKind] { [.emoji("👍"), .emoji("❤️")] }
+    func setReaction(_ reaction: ReactionKind, chatId: Int64, messageId: Int64, isChosen: Bool) {}
+    func messageLink(chatId: Int64, messageId: Int64) -> String { "https://t.me/c/1/\(messageId)" }
+    func resendMessages(chatId: Int64, ids: [Int64]) {}
+    func downloadFile(_ fileId: Int) -> FileRef { FileRef(id: fileId, size: 0, localPath: nil) }
+    func sendVoiceNote(chatId: Int64, file: URL, duration: Int, waveform: Data, replyTo: Int64?) {}
+    func setActivity(chatId: Int64, _ activity: ChatActivity?) {}
 }
 
 /// Conversations factices des tests UI : un exemple de chaque cas de la liste (non lus,

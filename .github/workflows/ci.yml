@@ -8,6 +8,11 @@ on:
     branches: [main]
     paths-ignore: ['docs/**', '**/*.md']
   workflow_dispatch:
+    inputs:
+      ui_tests:
+        description: "Inclure les tests UI (audits d'accessibilité)"
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -24,9 +29,10 @@ jobs:
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
       # Tests UI (audits d'accessibilité) sur les PR et les lancements manuels
-      # (onglet Actions → CI → Run workflow) ; tests unitaires seuls sur les push,
+      # (onglet Actions → CI → Run workflow, case « tests UI » cochée par défaut) ;
+      # tests unitaires seuls sur les push et les lancements manuels sans la case,
       # pour économiser les minutes macOS.
-      SCHEME: ${{ github.event_name == 'push' && 'TelegramAccessUnit' || 'TelegramAccess' }}
+      SCHEME: ${{ (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.ui_tests)) && 'TelegramAccessUnit' || 'TelegramAccess' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

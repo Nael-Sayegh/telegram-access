@@ -33,5 +33,6 @@ protocol ChatListService: AnyObject, Sendable {
     func searchMessages(_ query: String, offset: String, limit: Int) async throws -> MessageSearchPage
 }
 
-/// Service Telegram complet : connexion et conversations, sur le même client TDLib.
-protocol TelegramService: AuthService, ChatListService {}
+/// Service Telegram complet : connexion, liste des conversations et messages, sur le même
+/// client TDLib.
+protocol TelegramService: AuthService, ChatListService, ConversationService {}

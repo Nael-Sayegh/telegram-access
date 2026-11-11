@@ -25,8 +25,11 @@ final class AuthViewModel {
     /// Conversations du client courant. Créé avec le client (TDLib n'envoie chaque conversation
     /// qu'une fois), remplacé avec lui après une déconnexion.
     private(set) var chats: ChatStore?
-    /// Service du client courant, pour les opérations sur les conversations.
-    var chatService: (any ChatListService)? { service }
+    /// Changements des messages du client courant, créé et remplacé avec lui (aucun message
+    /// perdu entre l'ouverture d'une conversation et le chargement de son historique).
+    private(set) var messages: MessageHub?
+    /// Service du client courant, pour les opérations sur les conversations et les messages.
+    var chatService: (any TelegramService)? { service }
 
     private let config: AppConfig?
     private let makeService: (AppConfig) -> any TelegramService
@@ -51,6 +54,7 @@ final class AuthViewModel {
         let service = makeService(config)
         self.service = service
         chats = ChatStore(events: service.chatEvents)
+        messages = MessageHub(events: service.messageEvents)
         listenTask = Task { [weak self] in
             await service.start()
             for await step in service.steps {
@@ -76,6 +80,7 @@ final class AuthViewModel {
         listenTask = nil
         service = nil
         chats = nil
+        messages = nil
         isRecoveringPassword = false
         step = .starting
         start()

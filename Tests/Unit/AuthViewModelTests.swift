@@ -1,13 +1,15 @@
 import XCTest
 @testable import TelegramAccess
 
-/// Service Telegram factice : enregistre les appels de connexion et peut simuler une erreur
-/// Telegram. Les opérations sur les conversations ne font rien.
+/// Service Telegram factice : enregistre les appels (connexion, conversations, messages) et
+/// peut simuler une erreur Telegram.
 actor FakeAuthService: TelegramService {
     nonisolated let steps: AsyncStream<AuthStep>
     private let continuation: AsyncStream<AuthStep>.Continuation
     nonisolated let chatEvents: AsyncStream<ChatListEvent>
     private let chatContinuation: AsyncStream<ChatListEvent>.Continuation
+    nonisolated let messageEvents: AsyncStream<MessageEvent>
+    private let messageContinuation: AsyncStream<MessageEvent>.Continuation
 
     private(set) var phoneNumbers: [String] = []
     private(set) var registrations: [String] = []
@@ -23,6 +25,14 @@ actor FakeAuthService: TelegramService {
         let chatStream = AsyncStream.makeStream(of: ChatListEvent.self)
         chatEvents = chatStream.stream
         chatContinuation = chatStream.continuation
+        let messageStream = AsyncStream.makeStream(of: MessageEvent.self)
+        messageEvents = messageStream.stream
+        messageContinuation = messageStream.continuation
+    }
+
+    /// Simule un changement de message reçu de TDLib.
+    nonisolated func send(_ event: MessageEvent) {
+        messageContinuation.yield(event)
     }
 
     /// Simule un nouvel état reçu de TDLib.
@@ -147,6 +157,125 @@ actor FakeAuthService: TelegramService {
         messageSearches.append("\(query)|\(offset)")
         return messagePages.isEmpty ? MessageSearchPage(results: [], nextOffset: "") : messagePages.removeFirst()
     }
+
+    // MARK: - Messages
+
+    /// Opérations reçues sur les messages, ex. « send 1 Bonjour reply:5 », « open 1 ».
+    private(set) var messageCalls: [String] = []
+    /// Demandes d'historique : « conversation depuis décalage limite ».
+    private(set) var historyCalls: [String] = []
+    /// Pages d'historique renvoyées dans l'ordre, puis des pages vides.
+    private var historyPages: [[ChatMessage]] = []
+    private var storedMessages: [Int64: ChatMessage] = [:]
+    private var messageCapabilities = MessageCapabilities()
+    private var reactionChoices: [ReactionKind] = []
+
+    func setHistoryPages(_ pages: [[ChatMessage]]) {
+        historyPages = pages
+    }
+
+    func setStoredMessages(_ messages: [ChatMessage]) {
+        for message in messages { storedMessages[message.id] = message }
+    }
+
+    func setCapabilities(_ capabilities: MessageCapabilities) {
+        messageCapabilities = capabilities
+    }
+
+    func setAvailableReactions(_ reactions: [ReactionKind]) {
+        reactionChoices = reactions
+    }
+
+    func openChat(_ chatId: Int64) throws {
+        try throwIfNeeded()
+        messageCalls.append("open \(chatId)")
+    }
+
+    func closeChat(_ chatId: Int64) throws {
+        try throwIfNeeded()
+        messageCalls.append("close \(chatId)")
+    }
+
+    func history(chatId: Int64, from fromMessageId: Int64, offset: Int, limit: Int) throws -> [ChatMessage] {
+        try throwIfNeeded()
+        historyCalls.append("\(chatId) \(fromMessageId) \(offset) \(limit)")
+        return historyPages.isEmpty ? [] : historyPages.removeFirst()
+    }
+
+    func message(chatId: Int64, id: Int64) throws -> ChatMessage {
+        try throwIfNeeded()
+        messageCalls.append("get \(chatId) \(id)")
+        guard let message = storedMessages[id] else { throw TelegramError(code: 404, message: "Not Found") }
+        return message
+    }
+
+    func capabilities(chatId: Int64, messageId: Int64) throws -> MessageCapabilities {
+        try throwIfNeeded()
+        return messageCapabilities
+    }
+
+    func viewMessages(chatId: Int64, ids: [Int64]) throws {
+        try throwIfNeeded()
+        messageCalls.append("view \(chatId) \(ids.map { String($0) }.joined(separator: ","))")
+    }
+
+    func sendText(_ text: String, chatId: Int64, replyTo: Int64?) throws {
+        try throwIfNeeded()
+        messageCalls.append("send \(chatId) \(text)" + (replyTo.map { " reply:\($0)" } ?? ""))
+    }
+
+    func editText(_ text: String, chatId: Int64, messageId: Int64) throws {
+        try throwIfNeeded()
+        messageCalls.append("edit \(chatId) \(messageId) \(text)")
+    }
+
+    func deleteMessages(chatId: Int64, ids: [Int64], forEveryone: Bool) throws {
+        try throwIfNeeded()
+        messageCalls.append("deleteMessages \(chatId) \(ids.map { String($0) }.joined(separator: ",")) \(forEveryone)")
+    }
+
+    func forwardMessages(_ ids: [Int64], from chatId: Int64, to targetChatId: Int64) throws {
+        try throwIfNeeded()
+        messageCalls.append("forward \(ids.map { String($0) }.joined(separator: ",")) \(chatId) \(targetChatId)")
+    }
+
+    func setMessagePinned(chatId: Int64, messageId: Int64, _ isPinned: Bool) throws {
+        try throwIfNeeded()
+        messageCalls.append("pinMessage \(chatId) \(messageId) \(isPinned)")
+    }
+
+    func availableReactions(chatId: Int64, messageId: Int64) throws -> [ReactionKind] {
+        try throwIfNeeded()
+        return reactionChoices
+    }
+
+    func setReaction(_ reaction: ReactionKind, chatId: Int64, messageId: Int64, isChosen: Bool) throws {
+        try throwIfNeeded()
+        messageCalls.append("react \(chatId) \(messageId) \(reaction) \(isChosen)")
+    }
+
+    func messageLink(chatId: Int64, messageId: Int64) throws -> String {
+        try throwIfNeeded()
+        return "https://t.me/c/\(chatId)/\(messageId)"
+    }
+
+    func resendMessages(chatId: Int64, ids: [Int64]) throws {
+        try throwIfNeeded()
+        messageCalls.append("resend \(chatId) \(ids.map { String($0) }.joined(separator: ","))")
+    }
+
+    func downloadFile(_ fileId: Int) throws -> FileRef {
+        try throwIfNeeded()
+        messageCalls.append("download \(fileId)")
+        return FileRef(id: fileId, size: 0, localPath: "/tmp/\(fileId)")
+    }
+
+    func sendVoiceNote(chatId: Int64, file: URL, duration: Int, waveform: Data, replyTo: Int64?) throws {
+        try throwIfNeeded()
+        messageCalls.append("voice \(chatId) \(duration)")
+    }
+
+    func setActivity(chatId: Int64, _ activity: ChatActivity?) {}
 
     private func throwIfNeeded() throws {
         if let error = nextError {
@@ -296,12 +425,14 @@ final class AuthViewModelTests: XCTestCase {
         await waitUntil { model.step == .phoneNumber }
     }
 
-    /// Le store des conversations naît avec le client (aucun `updateNewChat` perdu) et est
-    /// remplacé avec lui après une déconnexion.
+    /// Le store des conversations et le hub des messages naissent avec le client (aucun
+    /// `updateNewChat` ni message perdu) et sont remplacés avec lui après une déconnexion.
     func testChatStoreFollowsTheClient() async {
         let model = makeModel()
         let firstStore = model.chats
+        let firstHub = model.messages
         XCTAssertNotNil(firstStore)
+        XCTAssertNotNil(firstHub)
 
         service.send(.myUserId(42))
         await waitUntil { model.chats?.state.myUserId == 42 }
@@ -311,6 +442,8 @@ final class AuthViewModelTests: XCTestCase {
         XCTAssertNotNil(model.chats)
         XCTAssertFalse(model.chats === firstStore)
         XCTAssertNil(model.chats?.state.myUserId)
+        XCTAssertNotNil(model.messages)
+        XCTAssertFalse(model.messages === firstHub)
     }
 
     func testForgotPasswordOpensRecovery() async {
