@@ -99,8 +99,8 @@ final class ConversationAccessibilityTests: XCTestCase {
         let app = openMarie()
         XCTAssertTrue(app.buttons["Aller au premier message non lu"].exists)
         XCTAssertTrue(app.buttons["Aller au dernier message"].exists)
-        try AccessibilityAudit.run(app, excluding: [.dynamicType, .textClipped])
 
+        // D'abord, pour l'avoir même si l'audit suivant échoue.
         var reported = 0
         try app.performAccessibilityAudit(for: [.dynamicType, .textClipped]) { issue in
             reported += 1
@@ -108,6 +108,8 @@ final class ConversationAccessibilityTests: XCTestCase {
             return true
         }
         print("Audit Dynamic Type (information) : \(reported) problème(s) signalé(s).")
+
+        try AccessibilityAudit.run(app, excluding: [.dynamicType, .textClipped])
     }
 
     /// Dynamic Type : en très grande taille de texte (accessibilité XXXL), un message est

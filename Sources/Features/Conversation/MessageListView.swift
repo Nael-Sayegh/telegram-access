@@ -60,26 +60,17 @@ struct MessageListView: View {
     private func row(_ item: ConversationItem) -> some View {
         switch item {
         case .start:
-            // Toute première ligne, juste sous la barre du haut : iOS 26 y estompe le contenu
-            // (effet de bord de défilement). En gris et en petit, le texte échouait à l'audit
-            // de contraste : couleur principale, taille courante et marge sous la barre.
-            Text("Début de la conversation.")
-                .font(.subheadline)
-                .foregroundStyle(Color.primary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity)
-                .padding(.top, 20)
+            // Toute première ligne, juste sous la barre du haut, dont les boutons (iOS 26)
+            // projettent une ombre grise : l'audit de contraste mesurait cette ombre dans le
+            // cadre de l'élément. Texte en couleur principale, cadre réduit aux lettres
+            // (`CenteredText`) et marge hors de l'élément pour descendre sous l'ombre.
+            CenteredText(text: "Début de la conversation.", font: .subheadline)
+                .padding(.top, 36)
                 .padding(.bottom, 8)
         case .day(_, let title):
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity)
+            CenteredText(text: title, font: .subheadline.weight(.semibold), isHeader: true)
                 .padding(.top, 10)
                 .padding(.bottom, 4)
-                .accessibilityAddTraits(.isHeader)
         case .message(let message):
             MessageBubble(row: message)
                 // Un message = un élément ; le libellé remplace les textes réunis de la bulle.
@@ -153,5 +144,27 @@ struct MessageListView: View {
         guard !Task.isCancelled else { return }
         proxy.scrollTo(id, anchor: anchor)
         focusedItem = id
+    }
+}
+
+/// Texte centré dont l'élément VoiceOver (et le cadre mesuré par l'audit d'accessibilité)
+/// se limite aux lettres : le centrage vient d'espaces autour, pas d'un cadre étiré sur toute
+/// la largeur, qui engloberait ce qui se trouve à côté (ombres de la barre…).
+private struct CenteredText: View {
+    let text: String
+    let font: Font
+    var isHeader = false
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Spacer(minLength: 0)
+            Text(text)
+                .font(font)
+                .foregroundStyle(Color.primary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(isHeader ? .isHeader : [])
+            Spacer(minLength: 0)
+        }
     }
 }
