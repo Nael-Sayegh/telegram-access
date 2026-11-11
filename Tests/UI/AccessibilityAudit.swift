@@ -10,10 +10,18 @@ enum AccessibilityAudit {
     /// une liste les lignes qui sortent alors de l'écran ne sont plus mesurables : faux positif
     /// connu, qui ne touche que les écrans assez longs. Le cas « unsupported » (police fixe)
     /// reste vérifié.
+    ///
+    /// `excluding` : vérifications que l'audit ne sait pas mener sur un écran donné. À réserver
+    /// aux cas expliqués sur place, avec un test qui contrôle la même chose autrement.
     @MainActor
-    static func run(_ app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) throws {
+    static func run(
+        _ app: XCUIApplication,
+        excluding excluded: XCUIAccessibilityAuditType = [],
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws {
         var problems: [String] = []
-        try app.performAccessibilityAudit { issue in
+        try app.performAccessibilityAudit(for: XCUIAccessibilityAuditType.all.subtracting(excluded)) { issue in
             let element = issue.element.map { "« \($0.label) »" } ?? "élément inconnu"
             let description = "\(issue.compactDescription) — \(element) — \(issue.detailedDescription)"
             if issue.auditType == .dynamicType,

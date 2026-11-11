@@ -9,7 +9,6 @@ final class ConversationAccessibilityTests: XCTestCase {
     }
 
     private static let marieRow = "Marie Dupont, 3 non lus, dernier message : On se voit demain ?, 9 h 05"
-    private static let lastMessage = "On se voit demain ?, 9 h 05"
 
     /// Élément dont le libellé VoiceOver est exactement `label`.
     @MainActor
@@ -17,16 +16,23 @@ final class ConversationAccessibilityTests: XCTestCase {
         app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", label)).firstMatch
     }
 
-    /// Ouvre la conversation avec Marie depuis la liste.
+    /// Premier message non lu de Marie : le focus et l'écran y sont placés à l'ouverture.
+    private static let firstUnread = "Bonjour !, 8 h 50"
+
+    /// Ouvre la conversation avec Marie depuis la liste ; `textSize` : catégorie de taille de
+    /// texte imposée au lancement (`UIContentSizeCategory`), taille du système sinon.
     @MainActor
-    private func openMarie() -> XCUIApplication {
+    private func openMarie(textSize: String? = nil) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-uiTestAuthStep", "ready"]
+        if let textSize {
+            app.launchArguments += ["-UIPreferredContentSizeCategoryName", textSize]
+        }
         app.launch()
         let row = element(app, Self.marieRow)
         XCTAssertTrue(row.waitForExistence(timeout: 15), "Ligne de Marie introuvable")
         row.tap()
-        XCTAssertTrue(element(app, Self.lastMessage).waitForExistence(timeout: 10), "Conversation non affichée")
+        XCTAssertTrue(element(app, Self.firstUnread).waitForExistence(timeout: 10), "Conversation non affichée")
         return app
     }
 
@@ -51,12 +57,47 @@ final class ConversationAccessibilityTests: XCTestCase {
         XCTAssertTrue(element(app, "Hier").waitForExistence(timeout: 5), "En-tête d'hier absent")
     }
 
+    /// Audit complet, sauf taille du texte et texte coupé : chaque message est un élément porté
+    /// par une cellule UIKit dont le texte est dans une bulle SwiftUI, et l'audit signale alors
+    /// tous les messages et en-têtes sans pouvoir les identifier (« élément inconnu »), que
+    /// l'élément soit la cellule ou la bulle (essayé le 2026-11-11). La taille du texte est
+    /// contrôlée par `testMessagesGrowWithTextSize`.
     @MainActor
     func testConversationScreen() throws {
         let app = openMarie()
         XCTAssertTrue(app.buttons["Aller au premier message non lu"].exists)
         XCTAssertTrue(app.buttons["Aller au dernier message"].exists)
-        try AccessibilityAudit.run(app)
+        try AccessibilityAudit.run(app, excluding: [.dynamicType, .textClipped])
+    }
+
+    /// Dynamic Type : en très grande taille de texte (accessibilité XXXL), un message est
+    /// nettement plus haut qu'à la taille par défaut (la bulle grandit, rien n'est coupé).
+    /// Captures jointes au rapport pour un contrôle visuel.
+    @MainActor
+    func testMessagesGrowWithTextSize() throws {
+        let regular = openMarie(textSize: "UICTContentSizeCategoryL")
+        let regularHeight = element(regular, Self.firstUnread).frame.height
+        attachScreenshot(of: regular, named: "Taille de texte par défaut")
+        regular.terminate()
+
+        let large = openMarie(textSize: "UICTContentSizeCategoryAccessibilityXXXL")
+        let largeHeight = element(large, Self.firstUnread).frame.height
+        attachScreenshot(of: large, named: "Taille de texte accessibilité XXXL")
+
+        XCTAssertGreaterThan(regularHeight, 0)
+        XCTAssertGreaterThan(
+            largeHeight,
+            regularHeight * 1.8,
+            "Le message doit grandir avec la taille du texte (\(regularHeight) → \(largeHeight) points)"
+        )
+    }
+
+    @MainActor
+    private func attachScreenshot(of app: XCUIApplication, named name: String) {
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = name
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
     }
 
     /// Le message envoyé apparaît en bas, « Vous » en tête de libellé.

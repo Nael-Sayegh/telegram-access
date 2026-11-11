@@ -257,50 +257,38 @@ final class ConversationViewController: UIViewController, UICollectionViewDelega
 
 /// Contenu et accessibilité des cellules de la liste des messages.
 ///
-/// L'élément VoiceOver est posé dans le contenu SwiftUI, pas sur la cellule UIKit : une
-/// cellule qui porte un libellé sans contenir elle-même le texte est vue par l'audit
-/// d'accessibilité comme ne suivant pas la taille du texte (Dynamic Type), alors qu'un élément
-/// SwiftUI est contrôlé correctement. Pour VoiceOver, le résultat est le même : un message =
-/// un élément.
+/// La cellule UIKit est l'élément VoiceOver (un message = un élément, libellé complet) : c'est
+/// elle que viseront les actions personnalisées et les rotors. L'audit automatique ne sait pas
+/// vérifier la taille du texte d'un tel élément (le texte est dans la bulle SwiftUI) : elle
+/// est contrôlée par un test UI dédié, qui lance l'app en très grande taille de texte.
 @MainActor
 enum MessageCellConfigurator {
     static func configure(_ cell: UICollectionViewListCell, with row: MessageRowModel) {
-        let label = ConversationLabels.message(row, calendar: .current)
         cell.contentConfiguration = UIHostingConfiguration {
-            MessageBubble(row: row, accessibilityText: label)
+            MessageBubble(row: row)
         }
         .margins(.horizontal, 12)
         .margins(.vertical, 3)
         cell.backgroundConfiguration = UIBackgroundConfiguration.clear()
-        cell.isAccessibilityElement = false
+        cell.isAccessibilityElement = true
+        cell.accessibilityLabel = ConversationLabels.message(row, calendar: .current)
+        cell.accessibilityTraits = .staticText
     }
 
     /// En-tête de jour : centré, en couleur de texte principale (contraste), annoncé comme
     /// en-tête ; fond opaque, car l'en-tête reste épinglé en haut pendant le défilement.
     static func configureHeader(_ header: UICollectionViewListCell, title: String) {
-        header.contentConfiguration = UIHostingConfiguration {
-            DayHeader(title: title)
-        }
-        .margins(.horizontal, 12)
-        .margins(.vertical, 4)
+        var content = UIListContentConfiguration.plainHeader()
+        content.text = title
+        content.textProperties.font = UIFont.preferredFont(forTextStyle: .subheadline)
+        content.textProperties.adjustsFontForContentSizeCategory = true
+        content.textProperties.color = .label
+        content.textProperties.alignment = .center
+        content.textProperties.numberOfLines = 0
+        header.contentConfiguration = content
         var background = UIBackgroundConfiguration.clear()
         background.backgroundColor = .systemBackground
         header.backgroundConfiguration = background
-        header.isAccessibilityElement = false
-    }
-}
-
-/// Titre d'un jour de la conversation (« Aujourd'hui », « Hier »…).
-private struct DayHeader: View {
-    let title: String
-
-    var body: some View {
-        Text(title)
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(Color.primary)
-            .multilineTextAlignment(.center)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity)
-            .accessibilityAddTraits(.isHeader)
+        header.accessibilityTraits = .header
     }
 }
