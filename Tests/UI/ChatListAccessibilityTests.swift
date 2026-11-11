@@ -112,7 +112,8 @@ final class ChatListAccessibilityTests: XCTestCase {
         XCTAssertFalse(message.exists)
     }
 
-    /// Sans VoiceOver, la suppression passe par le balayage et demande confirmation.
+    /// Sans VoiceOver, la suppression passe par le balayage et demande confirmation ; le bouton
+    /// « Annuler » ferme l'alerte sans rien supprimer.
     @MainActor
     func testDeletionAsksForConfirmation() throws {
         let app = launchList()
@@ -122,17 +123,35 @@ final class ChatListAccessibilityTests: XCTestCase {
         let delete = app.buttons["Supprimer"]
         XCTAssertTrue(delete.waitForExistence(timeout: 5))
         delete.tap()
-        let confirm = app.buttons["Supprimer pour moi"]
-        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["Supprimer aussi pour Marie Dupont"].exists)
+        let alert = app.alerts.firstMatch
+        XCTAssertTrue(alert.waitForExistence(timeout: 5), "Alerte de confirmation absente")
+        XCTAssertTrue(alert.staticTexts["Supprimer la conversation avec Marie Dupont ?"].exists)
+        XCTAssertTrue(alert.buttons["Supprimer pour moi"].exists)
+        XCTAssertTrue(alert.buttons["Supprimer aussi pour Marie Dupont"].exists)
 
-        // iOS 26 : pas de bouton « Annuler » visible, le dialogue (affiché près de la ligne, en
-        // haut) se ferme en touchant à côté. Avec VoiceOver : geste d'échappement.
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.9)).tap()
-        if !confirm.waitForNonExistence(timeout: 3) {
-            app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.6)).tap()
-        }
-        XCTAssertTrue(confirm.waitForNonExistence(timeout: 5), "Dialogue toujours affiché")
-        XCTAssertTrue(row.exists, "La conversation doit rester sans confirmation")
+        let cancel = alert.buttons["Annuler"]
+        XCTAssertTrue(cancel.exists, "Le bouton Annuler doit être visible")
+        cancel.tap()
+        XCTAssertTrue(alert.waitForNonExistence(timeout: 5), "Alerte toujours affichée")
+        XCTAssertTrue(row.exists, "La conversation doit rester après Annuler")
+    }
+
+    /// La déconnexion demande confirmation ; « Annuler » ferme l'alerte et garde la session.
+    @MainActor
+    func testLogoutCanBeCancelled() throws {
+        let app = launchList()
+        app.navigationBars["Discussions"].buttons["Options"].tap()
+        let logout = app.buttons["Se déconnecter"]
+        XCTAssertTrue(logout.waitForExistence(timeout: 5), "Option Se déconnecter absente")
+        logout.tap()
+
+        let alert = app.alerts.firstMatch
+        XCTAssertTrue(alert.waitForExistence(timeout: 5), "Alerte de confirmation absente")
+        XCTAssertTrue(alert.buttons["Se déconnecter"].exists)
+        let cancel = alert.buttons["Annuler"]
+        XCTAssertTrue(cancel.exists, "Le bouton Annuler doit être visible")
+        cancel.tap()
+        XCTAssertTrue(alert.waitForNonExistence(timeout: 5), "Alerte toujours affichée")
+        XCTAssertTrue(app.navigationBars["Discussions"].exists, "La liste doit rester affichée")
     }
 }

@@ -66,7 +66,9 @@ struct ChatListView: View {
                 }
             }
         }
-        .confirmationDialog("Se déconnecter de Telegram sur cet appareil ?", isPresented: $confirmsLogout, titleVisibility: .visible) {
+        // Alerte plutôt que `confirmationDialog`, pour que « Annuler » reste visible
+        // (voir `ChatDeletionDialogModifier`).
+        .alert("Se déconnecter de Telegram sur cet appareil ?", isPresented: $confirmsLogout) {
             Button("Se déconnecter", role: .destructive) { auth.logOut() }
             Button("Annuler", role: .cancel) {}
         }
@@ -323,19 +325,22 @@ extension View {
     }
 }
 
+/// Alerte plutôt que `confirmationDialog` : depuis iOS 26 (et sur iPad), la feuille d'actions
+/// s'affiche près de la ligne et masque le bouton « Annuler » (fermeture en touchant à côté).
+/// L'alerte, centrée et modale, affiche toujours « Annuler », que VoiceOver lit avec les autres
+/// boutons ; le geste d'échappement l'active aussi.
 private struct ChatDeletionDialogModifier: ViewModifier {
     @Bindable var model: ChatListViewModel
 
     func body(content: Content) -> some View {
         let request = model.deletionRequest
         let dialog = request.map { ChatActionLabels.deletionDialog(for: $0) }
-        content.confirmationDialog(
+        content.alert(
             Text(dialog?.title ?? ""),
             isPresented: Binding(
                 get: { model.deletionRequest != nil },
                 set: { if !$0 { model.deletionRequest = nil } }
             ),
-            titleVisibility: .visible,
             presenting: request
         ) { row in
             if let dialog {
