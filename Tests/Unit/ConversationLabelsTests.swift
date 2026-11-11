@@ -196,17 +196,19 @@ final class ConversationLabelsTests: XCTestCase {
 
     func testActivityText() {
         XCTAssertNil(ConversationLabels.activity([], isPrivateChat: true))
-        XCTAssertEqual(ConversationLabels.activity([("Marie", .typing)], isPrivateChat: true), "écrit…")
+        typealias Active = (name: String, activity: ChatActivity)
+        let marie: Active = (name: "Marie", activity: .typing)
+        let paul: Active = (name: "Paul", activity: .typing)
+        let paulRecording: Active = (name: "Paul", activity: .recordingVoiceNote)
+        let lea: Active = (name: "Léa", activity: .sendingFile)
+        XCTAssertEqual(ConversationLabels.activity([marie], isPrivateChat: true), "écrit…")
         XCTAssertEqual(
-            ConversationLabels.activity([("Paul", .recordingVoiceNote)], isPrivateChat: false),
+            ConversationLabels.activity([paulRecording], isPrivateChat: false),
             "Paul enregistre un message vocal…"
         )
+        XCTAssertEqual(ConversationLabels.activity([paul, marie], isPrivateChat: false), "Paul et Marie écrivent…")
         XCTAssertEqual(
-            ConversationLabels.activity([("Paul", .typing), ("Marie", .typing)], isPrivateChat: false),
-            "Paul et Marie écrivent…"
-        )
-        XCTAssertEqual(
-            ConversationLabels.activity([("Paul", .typing), ("Marie", .typing), ("Léa", .sendingFile)], isPrivateChat: false),
+            ConversationLabels.activity([paul, marie, lea], isPrivateChat: false),
             "3 personnes sont en activité…"
         )
     }

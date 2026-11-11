@@ -120,7 +120,7 @@ extension ChatListState {
         let quote = reply.quote.trimmingCharacters(in: .whitespacesAndNewlines)
         // Message d'une autre conversation : TDLib fournit son origine et son contenu.
         if let origin = reply.origin {
-            let text = quote.isEmpty ? reply.content.map { MessageLabels.content($0) } : quote
+            let text: String? = quote.isEmpty ? reply.content.map { MessageLabels.content($0) } : quote
             return ReplyLine(author: .named(originName(origin)), text: text)
         }
         if conversation.deletedIds.contains(reply.messageId) {

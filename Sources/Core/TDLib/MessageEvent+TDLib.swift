@@ -51,8 +51,9 @@ extension MessageEvent {
         }
     }
 
-    static func date(_ timestamp: Int) -> Date {
-        Date(timeIntervalSince1970: TimeInterval(timestamp))
+    /// `Foundation.Date` explicite : TDLibKit définit aussi un type `Date` (jour, mois, année).
+    static func date(_ timestamp: Int) -> Foundation.Date {
+        Foundation.Date(timeIntervalSince1970: TimeInterval(timestamp))
     }
 }
 
