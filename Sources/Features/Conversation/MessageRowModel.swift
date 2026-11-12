@@ -37,6 +37,13 @@ struct MessageRowModel: Identifiable, Equatable {
     var links: [URL] = []
     var mediaKind: MessageMedia.Kind?
     var isFailed = false
+    /// En cours d'envoi (identifiant provisoire).
+    var isPending = false
+    /// Texte ou légende copiable, contenu non protégé.
+    var canCopy = false
+    /// Mentionne l'utilisateur : mention non lue, lien de mention, ou réponse à un de ses
+    /// messages (comme Telegram). Rotor « Mentions ».
+    var isMention = false
 }
 
 extension ChatListState {
@@ -45,6 +52,9 @@ extension ChatListState {
     func messageRow(_ message: ChatMessage, in chat: ChatSummary, conversation: ConversationState) -> MessageRowModel {
         let media = message.body.media
         let opens = media.map { $0.kind == .voiceNote || $0.kind == .videoNote } ?? false
+        let reply = message.replyTo.map { replyLine($0, in: chat, conversation: conversation) }
+        let mentionsMe = myUserId.map { message.body.mentionedUserIds.contains($0) } ?? false
+        let isMention = !message.isOutgoing && (message.containsUnreadMention || mentionsMe || reply?.author == .me)
         return MessageRowModel(
             id: message.id,
             senderLabel: conversationSender(of: message, in: chat),
@@ -52,7 +62,7 @@ extension ChatListState {
             content: message.body.content,
             isUnopened: opens && !message.isOutgoing && !(media?.isListened ?? true),
             forwardedFrom: message.forwardOrigin.map { originName($0) },
-            reply: message.replyTo.map { replyLine($0, in: chat, conversation: conversation) },
+            reply: reply,
             date: message.date,
             status: conversationStatus(of: message, in: chat),
             isEdited: message.editDate != nil,
@@ -60,7 +70,10 @@ extension ChatListState {
             reactions: message.reactions,
             links: message.body.links,
             mediaKind: media?.kind,
-            isFailed: message.delivery == .failed
+            isFailed: message.delivery == .failed,
+            isPending: message.delivery == .pending,
+            canCopy: message.canBeSaved && MessageActionLabels.copyableText(message.body.content) != nil,
+            isMention: isMention
         )
     }
 

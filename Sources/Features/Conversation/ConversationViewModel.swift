@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import UIKit
 
 /// Jour d'une conversation : en-tête et messages, dans l'ordre chronologique.
 struct ConversationSection: Identifiable, Equatable {
@@ -49,6 +50,12 @@ enum ConversationItem: Identifiable, Equatable {
         case .day(let day, _, _): return .day(day)
         case .message(let row): return .message(row.id)
         }
+    }
+
+    /// Le message de la ligne, `nil` pour un titre de jour.
+    var message: MessageRowModel? {
+        if case .message(let row) = self { return row }
+        return nil
     }
 
     /// `reachedStart` : le premier message de la conversation est chargé.
@@ -104,6 +111,31 @@ final class ConversationViewModel {
     /// Dernière annonce faite, pour les tests.
     private(set) var lastAnnouncement: String?
 
+    // Actions sur les messages.
+    /// Ce que Telegram permet pour chaque message affiché, chargé à son apparition.
+    private(set) var capabilities: [Int64: MessageCapabilities] = [:]
+    /// Message auquel le brouillon répond (bandeau au-dessus du champ).
+    private(set) var replyingTo: Int64?
+    /// Message en cours de modification (son texte est dans le champ).
+    private(set) var editing: Int64?
+    /// Incrémenté pour placer le clavier et le focus VoiceOver dans le champ (Répondre,
+    /// Modifier : actions de l'utilisateur).
+    private(set) var composerFocusRequest = 0
+    /// Message dont la suppression attend confirmation (alerte).
+    var deletionRequest: MessageRowModel?
+    /// Message auquel réagir (feuille des réactions) ; `reactionChoices` : `nil` pendant le
+    /// chargement des réactions proposées.
+    var reactionRequest: MessageRowModel?
+    private(set) var reactionChoices: [ReactionKind]?
+    /// Message à transférer (feuille de choix de la conversation).
+    var forwardRequest: MessageRowModel?
+    /// Lien vers une autre app, ouvert après confirmation (alerte).
+    var linkConfirmation: URL?
+    /// Lien à ouvrir par la vue (ouverture système), remis à `nil` une fois ouvert.
+    private(set) var linkToOpen: URL?
+    /// Copie dans le presse-papiers ; remplacée dans les tests.
+    @ObservationIgnored var copyHandler: @MainActor (String) -> Void = { UIPasteboard.general.string = $0 }
+
     private let hub: MessageHub
     private let service: any ConversationService
     private var isOpen = false
@@ -118,6 +150,9 @@ final class ConversationViewModel {
     private var earlyOutcomes: [Int64: SendOutcome] = [:]
     private var viewedIds: Set<Int64> = []
     private var requestedReplyIds: Set<Int64> = []
+    private var requestedCapabilities: Set<Int64> = []
+    /// Brouillon mis de côté pendant une modification, rendu à son annulation.
+    private var draftBeforeEdit = ""
 
     private enum SendOutcome {
         case sent
@@ -254,6 +289,7 @@ final class ConversationViewModel {
 
     /// À appeler quand un message va s'afficher : charge la suite à l'approche d'un bord.
     func messageAppeared(_ id: Int64) {
+        loadCapabilities(id)
         guard !isOpening, let index = state.orderedIds.firstIndex(of: id) else { return }
         if index < Self.prefetchDistance {
             Task { await loadOlder() }
@@ -360,23 +396,332 @@ final class ConversationViewModel {
             return
         }
         guard !isSending else { return }
+        if let editing {
+            saveEdit(text, messageId: editing)
+            return
+        }
+        // Réponse à un message toujours présent (il a pu être supprimé entre-temps).
+        let replyTo = replyingTo.flatMap { state.message($0) != nil ? $0 : nil }
         isSending = true
         draft = ""
+        replyingTo = nil
         Task {
             do {
                 if !state.reachedLatest {
                     await showLatest(focus: false)
                 }
-                let temporaryId = try await service.sendText(text, chatId: chatId, replyTo: nil)
+                let temporaryId = try await service.sendText(text, chatId: chatId, replyTo: replyTo)
                 track(temporaryId)
                 scrollToBottomRequest += 1
             } catch {
                 if draft.isEmpty {
                     draft = text
+                    replyingTo = replyTo
                 }
                 announce(ConversationLabels.sendFailure(error))
             }
             isSending = false
+        }
+    }
+
+    /// Magic Tap (double toucher à deux doigts) : envoie le brouillon s'il y en a un.
+    /// (Lot 5 : lecture / pause du vocal en cours d'abord.)
+    func magicTap() {
+        if canSend {
+            send()
+        } else {
+            announce(MessageActionLabels.nothingToSend)
+        }
+    }
+
+    // MARK: - Actions sur les messages
+
+    /// Réactions possibles : pas dans une conversation secrète ni dans les Messages enregistrés.
+    var canReact: Bool {
+        let list = store.state
+        guard let chat = list.chats[chatId] else { return false }
+        if case .secret = chat.kind { return false }
+        return !list.isSavedMessages(chat)
+    }
+
+    /// Actions proposées pour un message (actions personnalisées VoiceOver, menu contextuel).
+    func actions(for row: MessageRowModel) -> [MessageAction] {
+        MessageActionLabels.actions(for: row, capabilities: capabilities[row.id], canReact: canReact)
+    }
+
+    /// Vrai pour un message reçu après le dernier lu à l'ouverture (rotor « Messages non lus »).
+    func isUnreadAtOpen(_ row: MessageRowModel) -> Bool {
+        hadUnreadAtOpen && !row.isOutgoing && row.id > lastReadAtOpen
+    }
+
+    /// Exécute une action ; celles qui demandent un choix ouvrent d'abord une feuille ou une
+    /// alerte. Le résultat (ou l'erreur) est annoncé ; la liste suit les changements de TDLib.
+    func perform(_ action: MessageAction, on row: MessageRowModel) {
+        let chatId = chatId
+        let messageId = row.id
+        switch action {
+        case .reply:
+            startReply(to: row)
+        case .react:
+            openReactions(for: row)
+        case .copy:
+            guard row.canCopy, let text = MessageActionLabels.copyableText(row.content) else { return }
+            copyHandler(text)
+            announce(MessageActionLabels.copied)
+        case .forward:
+            forwardRequest = row
+        case .edit:
+            startEditing(row)
+        case .pin, .unpin:
+            let isPinned = action == .pin
+            runAction(success: isPinned ? MessageActionLabels.pinned : MessageActionLabels.unpinned) {
+                try await $0.setMessagePinned(chatId: chatId, messageId: messageId, isPinned)
+            }
+        case .openLink(let url):
+            open(url)
+        case .resend:
+            resend(messageId)
+        case .delete:
+            deletionRequest = row
+        }
+    }
+
+    /// Ouvre un lien : directement pour le web, Telegram et le courriel ; après confirmation
+    /// (destination complète affichée) pour une autre app.
+    func open(_ url: URL) {
+        if MessageTextTools.requiresConfirmation(url) {
+            linkConfirmation = url
+        } else {
+            linkToOpen = url
+        }
+    }
+
+    /// Ouverture confirmée dans l'alerte.
+    func confirmLink(_ url: URL) {
+        linkConfirmation = nil
+        linkToOpen = url
+    }
+
+    /// À appeler par la vue une fois le lien transmis au système.
+    func linkOpened() {
+        linkToOpen = nil
+    }
+
+    /// Bandeau au-dessus du champ pendant une réponse ou une modification.
+    struct ComposerContext: Equatable {
+        /// « Réponse à Paul Martin », « Modification du message » ; aussi libellé du champ.
+        var title: String
+        /// Extrait du message concerné.
+        var excerpt: String
+        var cancelLabel: String
+        var isEditing: Bool
+    }
+
+    var composerContext: ComposerContext? {
+        let list = store.state
+        if let editing, let message = state.message(editing) {
+            return ComposerContext(
+                title: MessageActionLabels.editContext,
+                excerpt: ConversationLabels.excerpt(MessageLabels.content(message.body.content)),
+                cancelLabel: MessageActionLabels.cancelEdit,
+                isEditing: true
+            )
+        }
+        guard let replyingTo, let message = state.message(replyingTo), let chat = list.chats[chatId] else {
+            return nil
+        }
+        let author: ReplyLine.Author
+        if message.isOutgoing && !list.isSavedMessages(chat) {
+            author = .me
+        } else if let name = list.authorName(of: message.sender, signature: message.authorSignature) {
+            author = .named(name)
+        } else {
+            author = .unknown
+        }
+        return ComposerContext(
+            title: MessageActionLabels.replyContext(author),
+            excerpt: ConversationLabels.excerpt(MessageLabels.content(message.body.content)),
+            cancelLabel: MessageActionLabels.cancelReply,
+            isEditing: false
+        )
+    }
+
+    /// Libellé du champ de saisie : « Message », ou le contexte (« Réponse à Paul Martin »).
+    var composerFieldLabel: String {
+        composerContext?.title ?? "Message"
+    }
+
+    /// Annule une réponse ou une modification en cours (geste Escape, bouton du bandeau).
+    /// Renvoie faux s'il n'y avait rien à annuler (Escape fait alors revenir à la liste).
+    @discardableResult
+    func cancelComposerMode() -> Bool {
+        if editing != nil {
+            editing = nil
+            draft = draftBeforeEdit
+            draftBeforeEdit = ""
+            announce(MessageActionLabels.editCancelled)
+            return true
+        }
+        if replyingTo != nil {
+            replyingTo = nil
+            announce(MessageActionLabels.replyCancelled)
+            return true
+        }
+        return false
+    }
+
+    /// Choix d'une réaction dans la feuille : l'ajoute, ou la retire si elle était choisie.
+    func toggleReaction(_ kind: ReactionKind, on row: MessageRowModel) {
+        let add = !row.reactions.contains { $0.kind == kind && $0.isChosen }
+        let chatId = chatId
+        let messageId = row.id
+        reactionRequest = nil
+        runAction(success: MessageActionLabels.reaction(kind, added: add)) {
+            try await $0.setReaction(kind, chatId: chatId, messageId: messageId, isChosen: add)
+        }
+    }
+
+    /// Conversations proposées pour un transfert : liste principale, sans les conversations
+    /// secrètes (Telegram n'y transfère pas).
+    var forwardTargets: [ChatRowModel] {
+        let list = store.state
+        return list.chats(in: .main)
+            .filter { if case .secret = $0.kind { return false } else { return true } }
+            .map { list.row(for: $0, in: .main) }
+    }
+
+    func forward(_ row: MessageRowModel, to target: ChatRowModel) {
+        let chatId = chatId
+        let messageId = row.id
+        let targetId = target.id
+        forwardRequest = nil
+        runAction(success: MessageActionLabels.forwarded(to: target.title)) {
+            try await $0.forwardMessages([messageId], from: chatId, to: targetId)
+        }
+    }
+
+    /// Textes de l'alerte de suppression, selon ce que Telegram permet pour ce message.
+    func deletionDialog(for row: MessageRowModel) -> MessageDeletionDialog {
+        let list = store.state
+        let chat = list.chats[chatId]
+        return MessageActionLabels.deletionDialog(
+            capabilities: capabilities[row.id] ?? MessageCapabilities(canBeDeletedOnlyForSelf: true),
+            chatTitle: title,
+            isPrivateChat: chat?.kind.peerUserId != nil,
+            isSavedMessages: chat.map { list.isSavedMessages($0) } ?? false
+        )
+    }
+
+    func confirmDeletion(of row: MessageRowModel, forEveryone: Bool) {
+        let chatId = chatId
+        let messageId = row.id
+        deletionRequest = nil
+        if replyingTo == messageId { replyingTo = nil }
+        if editing == messageId { cancelComposerMode() }
+        runAction(success: MessageActionLabels.deleted) {
+            try await $0.deleteMessages(chatId: chatId, ids: [messageId], forEveryone: forEveryone)
+        }
+    }
+
+    private func startReply(to row: MessageRowModel) {
+        if editing != nil {
+            editing = nil
+            draft = draftBeforeEdit
+            draftBeforeEdit = ""
+        }
+        replyingTo = row.id
+        composerFocusRequest += 1
+    }
+
+    private func startEditing(_ row: MessageRowModel) {
+        guard case .text(let text) = row.content else { return }
+        if editing == nil {
+            draftBeforeEdit = draft
+        }
+        replyingTo = nil
+        editing = row.id
+        draft = text
+        composerFocusRequest += 1
+    }
+
+    private func saveEdit(_ text: String, messageId: Int64) {
+        let chatId = chatId
+        let service = service
+        isSending = true
+        editing = nil
+        draft = draftBeforeEdit
+        draftBeforeEdit = ""
+        Task {
+            do {
+                try await service.editText(text, chatId: chatId, messageId: messageId)
+                announce(MessageActionLabels.edited)
+            } catch {
+                // Le texte modifié revient dans le champ, toujours en modification.
+                draftBeforeEdit = draft
+                editing = messageId
+                draft = text
+                announce(MessageActionLabels.error(error))
+            }
+            isSending = false
+        }
+    }
+
+    private func openReactions(for row: MessageRowModel) {
+        let chatId = chatId
+        let messageId = row.id
+        let service = service
+        reactionChoices = nil
+        reactionRequest = row
+        Task {
+            let choices = (try? await service.availableReactions(chatId: chatId, messageId: messageId)) ?? []
+            guard reactionRequest?.id == messageId else { return }
+            reactionChoices = choices
+        }
+    }
+
+    private func resend(_ messageId: Int64) {
+        let chatId = chatId
+        let service = service
+        Task {
+            do {
+                let newIds = try await service.resendMessages(chatId: chatId, ids: [messageId])
+                announce(MessageActionLabels.resending)
+                for id in newIds {
+                    track(id)
+                }
+            } catch {
+                announce(MessageActionLabels.error(error))
+            }
+        }
+    }
+
+    /// Lance une opération sur le service et annonce son résultat ou son erreur.
+    private func runAction(
+        success: String,
+        _ operation: @escaping @Sendable (any ConversationService) async throws -> Void
+    ) {
+        let service = service
+        Task {
+            do {
+                try await operation(service)
+                announce(success)
+            } catch {
+                announce(MessageActionLabels.error(error))
+            }
+        }
+    }
+
+    /// Propriétés Telegram d'un message affiché (hors ligne), une seule fois par message.
+    private func loadCapabilities(_ id: Int64) {
+        guard capabilities[id] == nil,
+              let message = state.messages[id], message.delivery == .sent,
+              requestedCapabilities.insert(id).inserted else { return }
+        let chatId = chatId
+        let service = service
+        Task {
+            if let loaded = try? await service.capabilities(chatId: chatId, messageId: id) {
+                capabilities[id] = loaded
+            }
         }
     }
 

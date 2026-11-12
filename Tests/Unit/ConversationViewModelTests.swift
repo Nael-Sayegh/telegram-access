@@ -58,6 +58,9 @@ final class ConversationViewModelTests: XCTestCase {
         XCTAssertTrue(model.state.reachedLatest, "La page contient le dernier message (40)")
         XCTAssertEqual(model.firstUnreadId, 30)
         XCTAssertEqual(model.focusRequest, MessageFocusRequest(messageId: 30, position: .top, serial: 1))
+        // Rotor « Messages non lus » : les messages reçus après le dernier lu à l'ouverture.
+        let unread = model.items.compactMap(\.message).filter { model.isUnreadAtOpen($0) }
+        XCTAssertEqual(unread.map(\.id), [30, 40])
     }
 
     func testFailedOpeningCanBeRetried() async {

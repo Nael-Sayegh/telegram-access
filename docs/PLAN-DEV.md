@@ -231,6 +231,8 @@ telegram-access/                  # dépôt GitHub privé
 
 - 2026-11-11, essai sur iPhone du lot 2 : parcours VoiceOver de la liste des messages désordonné, différent selon le sens. Liste refaite en SwiftUI (`List`) : ordre de lecture = ordre chronologique, y compris hors de l'écran, titres de jour en lignes ordinaires (plus d'en-têtes collants), premier titre lu « Hier, début de la conversation » une fois tout l'historique chargé, position conservée quand l'historique s'insère au-dessus. Test UI de l'ordre de lecture ajouté ; audit d'accessibilité complet de l'écran (taille du texte comprise). CI verte et parcours VoiceOver validé sur iPhone le 2026-11-12.
 
+- 2026-11-12, phase 3, lot 3 : actions sur les messages en actions personnalisées VoiceOver (et menu contextuel sans VoiceOver) selon ce que Telegram permet — répondre (bandeau, champ « Réponse à Paul Martin »), réagir (feuille), copier, transférer (feuille avec recherche), modifier (brouillon mis de côté), épingler, ouvrir un lien (confirmation pour une autre app ; double toucher si lien unique), réessayer l'envoi, supprimer (alerte) ; résultats annoncés ; rotors Messages non lus, Liens, Mentions, Médias ; Magic Tap (envoi) et Escape (annule réponse / modification, sinon retour). Tests unitaires et UI.
+
 **Reste à faire côté compte (manuel)**
 - Rien de bloquant pour TestFlight (secrets `release` en place, envoi fonctionnel).
 - Avant de rendre l'app disponible en France sur l'App Store : déclaration ANSSI, envoi dans App Store Connect, puis `ITSAppUsesNonExemptEncryption = YES` + `ITSEncryptionExportComplianceCode` (voir `docs/CONFIGURATION.md`).
@@ -239,4 +241,4 @@ telegram-access/                  # dépôt GitHub privé
 - Nom affiché définitif (provisoire : « Accessigram », dans `Config/Base.xcconfig`) — doit respecter les conditions de Telegram.
 - Push chiffrées (phase 6) : l'extension de notification doit lire la base TDLib appareil verrouillé, ce qui est incompatible avec `completeUnlessOpen` et la clé `WhenUnlockedThisDeviceOnly` → choisir avant la phase 6 (ex. `completeUntilFirstUserAuthentication` + `AfterFirstUnlockThisDeviceOnly` en App Group, avec migration de la clé).
 
-**Prochaine étape** : phase 3, lot 3 : actions sur les messages (répondre, réagir, copier, transférer, modifier, épingler, liens avec confirmation pour une autre app, renvoyer, supprimer), rotors (non lus, liens, mentions, médias), Magic Tap et Escape.
+**Prochaine étape** : CI et essai sur iPhone du lot 3 (chaque action, rotors, Magic Tap, Escape), puis lot 4 : annonce réglable des messages entrants.

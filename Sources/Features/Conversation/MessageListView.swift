@@ -19,6 +19,8 @@ struct MessageListView: View {
     /// Messages actuellement à l'écran (apparition / disparition des lignes).
     @State private var visibleIds: Set<Int64> = []
     @State private var reportTask: Task<Void, Never>?
+    /// Espace des rotors : chaque message y est repéré, même hors écran.
+    @Namespace private var rotorNamespace
 
     var body: some View {
         let items = model.items
@@ -29,8 +31,10 @@ struct MessageListView: View {
                     .listRowSeparator(.hidden)
                     .listRowInsets(EdgeInsets(top: 3, leading: 12, bottom: 3, trailing: 12))
                     .accessibilityFocused($focusedItem, equals: item.id)
+                    .accessibilityRotorEntry(id: item.id, in: rotorNamespace)
             }
             .listStyle(.plain)
+            .messageRotors(items.compactMap(\.message), model: model, namespace: rotorNamespace)
             // Le premier titre de jour n'est jamais collé à la barre du haut, dont les
             // boutons (capsules d'iOS 26) projettent une ombre.
             .contentMargins(.top, 20, for: .scrollContent)
@@ -72,10 +76,25 @@ struct MessageListView: View {
                 .padding(.top, 10)
                 .padding(.bottom, 4)
         case .message(let message):
+            let actions = model.actions(for: message)
             MessageBubble(row: message)
                 // Un message = un élément ; le libellé remplace les textes réunis de la bulle.
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel(Text(verbatim: ConversationLabels.message(message, calendar: .current)))
+                // Actions personnalisées (balayer vers le haut ou le bas), dans un ordre fixe.
+                .accessibilityActions {
+                    ForEach(actions, id: \.self) { action in
+                        Button(MessageActionLabels.name(action)) {
+                            model.perform(action, on: message)
+                        }
+                    }
+                }
+                .modifier(SingleLinkActivation(link: message.links.count == 1 ? message.links.first : nil) { url in
+                    model.open(url)
+                })
+                .modifier(MessageContextMenu(actions: actions, isEnabled: !voiceOverEnabled) { action in
+                    model.perform(action, on: message)
+                })
                 .onAppear { appeared(message.id) }
                 .onDisappear { disappeared(message.id) }
         }
@@ -144,6 +163,96 @@ struct MessageListView: View {
         guard !Task.isCancelled else { return }
         proxy.scrollTo(id, anchor: anchor)
         focusedItem = id
+    }
+}
+
+/// Message contenant un seul lien : l'activation (double toucher, ou toucher sans VoiceOver)
+/// l'ouvre, et VoiceOver annonce « lien ». Avec plusieurs liens, chacun a son action.
+private struct SingleLinkActivation: ViewModifier {
+    let link: URL?
+    let open: (URL) -> Void
+
+    func body(content: Content) -> some View {
+        if let link {
+            content
+                .accessibilityAddTraits(.isLink)
+                .accessibilityAction { open(link) }
+                .onTapGesture { open(link) }
+        } else {
+            content
+        }
+    }
+}
+
+/// Menu contextuel (appui long) pour l'usage sans VoiceOver. Désactivé sous VoiceOver : il
+/// doublerait les actions personnalisées.
+private struct MessageContextMenu: ViewModifier {
+    let actions: [MessageAction]
+    let isEnabled: Bool
+    let perform: (MessageAction) -> Void
+
+    func body(content: Content) -> some View {
+        if isEnabled, !actions.isEmpty {
+            content.contextMenu {
+                ForEach(actions, id: \.self) { action in
+                    Button(role: action == .delete ? .destructive : nil) {
+                        perform(action)
+                    } label: {
+                        Label(MessageActionLabels.name(action), systemImage: Self.icon(action))
+                    }
+                }
+            }
+        } else {
+            content
+        }
+    }
+
+    private static func icon(_ action: MessageAction) -> String {
+        switch action {
+        case .reply: return "arrowshape.turn.up.left"
+        case .react: return "face.smiling"
+        case .copy: return "doc.on.doc"
+        case .forward: return "arrowshape.turn.up.right"
+        case .edit: return "pencil"
+        case .pin: return "pin"
+        case .unpin: return "pin.slash"
+        case .openLink: return "safari"
+        case .resend: return "arrow.clockwise"
+        case .delete: return "trash"
+        }
+    }
+}
+
+extension View {
+    /// Rotors VoiceOver « Messages non lus » (à l'ouverture), « Liens », « Mentions »,
+    /// « Médias » : aller directement d'un message concerné au suivant, y compris hors écran.
+    func messageRotors(_ rows: [MessageRowModel], model: ConversationViewModel, namespace: Namespace.ID) -> some View {
+        let unread = rows.filter { model.isUnreadAtOpen($0) }
+        let links = rows.filter { !$0.links.isEmpty }
+        let mentions = rows.filter(\.isMention)
+        let media = rows.filter { $0.mediaKind != nil }
+        // Chaque entrée est lue avec le libellé complet du message.
+        return self
+            .accessibilityRotor(Text("Messages non lus")) {
+                ForEach(unread) { row in
+                    AccessibilityRotorEntry(Text(verbatim: ConversationLabels.message(row, calendar: .current)), id: ConversationItem.ID.message(row.id), in: namespace)
+                }
+            }
+            .accessibilityRotor(Text("Liens")) {
+                ForEach(links) { row in
+                    AccessibilityRotorEntry(Text(verbatim: ConversationLabels.message(row, calendar: .current)), id: ConversationItem.ID.message(row.id), in: namespace)
+                }
+            }
+            .accessibilityRotor(Text("Mentions")) {
+                ForEach(mentions) { row in
+                    AccessibilityRotorEntry(Text(verbatim: ConversationLabels.message(row, calendar: .current)), id: ConversationItem.ID.message(row.id), in: namespace)
+                }
+            }
+            .accessibilityRotor(Text("Médias")) {
+                ForEach(media) { row in
+                    AccessibilityRotorEntry(Text(verbatim: ConversationLabels.message(row, calendar: .current)), id: ConversationItem.ID.message(row.id), in: namespace)
+                }
+            }
     }
 }
 

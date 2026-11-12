@@ -157,7 +157,20 @@ actor UITestAuthService: TelegramService {
         return message
     }
 
-    func capabilities(chatId: Int64, messageId: Int64) -> MessageCapabilities { MessageCapabilities() }
+    /// Tout est permis, sauf modifier un message reçu.
+    func capabilities(chatId: Int64, messageId: Int64) -> MessageCapabilities {
+        let isOutgoing = UITestChatData.conversation(chatId).first { $0.id == messageId }?.isOutgoing ?? true
+        return MessageCapabilities(
+            canBeReplied: true,
+            canBeEdited: isOutgoing,
+            canBeForwarded: true,
+            canBePinned: true,
+            canBeSaved: true,
+            canBeDeletedOnlyForSelf: true,
+            canBeDeletedForAllUsers: true,
+            canGetLink: false
+        )
+    }
     func viewMessages(chatId: Int64, ids: [Int64]) {}
 
     /// Message provisoire puis envoi réussi, comme TDLib.
@@ -182,7 +195,7 @@ actor UITestAuthService: TelegramService {
     func availableReactions(chatId: Int64, messageId: Int64) -> [ReactionKind] { [.emoji("👍"), .emoji("❤️")] }
     func setReaction(_ reaction: ReactionKind, chatId: Int64, messageId: Int64, isChosen: Bool) {}
     func messageLink(chatId: Int64, messageId: Int64) -> String { "https://t.me/c/1/\(messageId)" }
-    func resendMessages(chatId: Int64, ids: [Int64]) {}
+    func resendMessages(chatId: Int64, ids: [Int64]) -> [Int64] { [] }
     func downloadFile(_ fileId: Int) -> FileRef { FileRef(id: fileId, size: 0, localPath: nil) }
     func sendVoiceNote(chatId: Int64, file: URL, duration: Int, waveform: Data, replyTo: Int64?) -> Int64 {
         nextMessageId += 1

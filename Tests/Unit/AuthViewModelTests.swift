@@ -275,9 +275,14 @@ actor FakeAuthService: TelegramService {
         return "https://t.me/c/\(chatId)/\(messageId)"
     }
 
-    func resendMessages(chatId: Int64, ids: [Int64]) throws {
+    /// Renvoie de nouveaux identifiants provisoires, un par message.
+    func resendMessages(chatId: Int64, ids: [Int64]) throws -> [Int64] {
         try throwIfNeeded()
         messageCalls.append("resend \(chatId) \(ids.map { String($0) }.joined(separator: ","))")
+        return ids.map { _ in
+            nextTemporaryId += 1
+            return nextTemporaryId - 1
+        }
     }
 
     func downloadFile(_ fileId: Int) throws -> FileRef {

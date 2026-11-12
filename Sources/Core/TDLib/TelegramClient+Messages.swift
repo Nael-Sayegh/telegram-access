@@ -162,10 +162,11 @@ extension TelegramClient: ConversationService {
         return link.link
     }
 
-    func resendMessages(chatId: Int64, ids: [Int64]) async throws {
-        _ = try await run {
+    func resendMessages(chatId: Int64, ids: [Int64]) async throws -> [Int64] {
+        let messages = try await run {
             try await $0.resendMessages(chatId: chatId, messageIds: ids, paidMessageStarCount: 0, quote: nil)
         }
+        return (messages.messages ?? []).map(\.id)
     }
 
     func downloadFile(_ fileId: Int) async throws -> FileRef {

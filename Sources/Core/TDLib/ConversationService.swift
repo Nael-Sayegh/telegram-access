@@ -40,8 +40,9 @@ protocol ConversationService: AnyObject, Sendable {
     func setReaction(_ reaction: ReactionKind, chatId: Int64, messageId: Int64, isChosen: Bool) async throws
     /// Lien public ou privé vers le message (t.me).
     func messageLink(chatId: Int64, messageId: Int64) async throws -> String
-    /// Renvoie des messages dont l'envoi a échoué.
-    func resendMessages(chatId: Int64, ids: [Int64]) async throws
+    /// Renvoie des messages dont l'envoi a échoué (TDLib supprime les anciens) et renvoie les
+    /// identifiants provisoires des nouveaux, comme `sendText`.
+    func resendMessages(chatId: Int64, ids: [Int64]) async throws -> [Int64]
     /// Télécharge entièrement le fichier et renvoie son état final (chemin local).
     func downloadFile(_ fileId: Int) async throws -> FileRef
     /// Envoie un vocal enregistré (fichier local) ; `waveform` en 5 bits par échantillon.

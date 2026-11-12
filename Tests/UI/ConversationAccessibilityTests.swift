@@ -172,4 +172,55 @@ final class ConversationAccessibilityTests: XCTestCase {
         app.typeText("Salut")
         XCTAssertTrue(send.isEnabled)
     }
+
+    // MARK: - Actions (menu contextuel, sans VoiceOver ; les mêmes actions sont proposées en
+    // actions personnalisées sous VoiceOver)
+
+    /// Appui long sur un message, puis une action du menu.
+    @MainActor
+    private func chooseInMenu(_ app: XCUIApplication, message: String, action: String) {
+        let bubble = element(app, message)
+        XCTAssertTrue(bubble.waitForExistence(timeout: 5), "Message « \(message) » absent")
+        bubble.press(forDuration: 1.2)
+        let button = app.buttons[action]
+        XCTAssertTrue(button.waitForExistence(timeout: 5), "Action « \(action) » absente du menu")
+        button.tap()
+    }
+
+    /// Répondre : bandeau au-dessus du champ, champ renommé ; « Annuler la réponse » revient
+    /// au champ normal. Écran audité pendant la réponse.
+    @MainActor
+    func testReplyFromContextMenu() throws {
+        let app = openMarie()
+        chooseInMenu(app, message: Self.firstUnread, action: "Répondre")
+
+        let field = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == %@", "Réponse à Marie Dupont"))
+            .firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 5), "Le champ doit rappeler la réponse")
+        let cancel = app.buttons["Annuler la réponse"]
+        XCTAssertTrue(cancel.exists)
+        try AccessibilityAudit.run(app)
+
+        cancel.tap()
+        XCTAssertTrue(field.waitForNonExistence(timeout: 5))
+        XCTAssertFalse(cancel.exists)
+    }
+
+    /// Supprimer demande confirmation ; « Annuler » ferme l'alerte sans rien supprimer.
+    @MainActor
+    func testDeletingAMessageAsksForConfirmation() throws {
+        let app = openMarie()
+        let mine = "Vous, Pas encore, je regarde ce soir., 18 h 45, lu"
+        chooseInMenu(app, message: mine, action: "Supprimer")
+
+        let alert = app.alerts.firstMatch
+        XCTAssertTrue(alert.waitForExistence(timeout: 5), "Alerte de confirmation absente")
+        XCTAssertTrue(alert.staticTexts["Supprimer ce message ?"].exists)
+        XCTAssertTrue(alert.buttons["Supprimer pour moi"].exists)
+        XCTAssertTrue(alert.buttons["Supprimer aussi pour Marie Dupont"].exists)
+        alert.buttons["Annuler"].tap()
+        XCTAssertTrue(alert.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(element(app, mine).exists, "Le message doit rester après Annuler")
+    }
 }
