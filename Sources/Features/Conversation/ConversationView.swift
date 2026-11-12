@@ -99,6 +99,10 @@ struct ConversationView: View {
 /// Barre de rédaction : activité des participants (« écrit… »), bandeau de réponse ou de
 /// modification, champ multiligne, bouton Envoyer à position fixe, estompé tant que le champ
 /// est vide (VoiceOver : « Envoyer, estompé, bouton »).
+///
+/// Fond opaque, pas de matériau translucide : les messages qui défilent derrière ne
+/// transparaissent pas sous le texte du bandeau (contraste constant, comme avec « Réduire la
+/// transparence »).
 private struct ComposerBar: View {
     @Bindable var model: ConversationViewModel
     @ScaledMetric(relativeTo: .title2) private var sendIconSize: CGFloat = 32
@@ -153,7 +157,8 @@ private struct ComposerBar: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(.bar)
+        .background(Color(uiColor: .systemBackground))
+        .overlay(alignment: .top) { Divider() }
         // Répondre, Modifier : clavier et focus VoiceOver dans le champ (action de l'utilisateur).
         .onChange(of: model.composerFocusRequest) {
             isFieldFocused = true
@@ -177,9 +182,10 @@ private struct ComposerContextBanner: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(context.title)
                     .font(.footnote.weight(.semibold))
+                // Couleur de texte pleine : l'extrait se distingue du titre par la graisse.
                 Text(context.excerpt)
                     .font(.footnote)
-                    .readableSecondary()
+                    .foregroundStyle(Color.primary)
                     // Aux tailles « accessibilité », rien n'est tronqué.
                     .lineLimit(typeSize.isAccessibilitySize ? nil : 2)
             }
