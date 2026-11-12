@@ -15,8 +15,8 @@ enum AccessibilityAudit {
     ///   Modifier : ils n'appartiennent pas à l'app.
     ///
     /// Le contenu qui défile sous la barre de navigation, estompé par iOS 26, échoue au contrôle
-    /// de contraste, souvent sans élément identifié : avant l'audit, le test le ramène à l'écran
-    /// (voir `ConversationAccessibilityTests.scrollToStart`).
+    /// de contraste, souvent sans élément identifié : avant l'audit, le test ferme le clavier et
+    /// ramène ce contenu à l'écran (voir `ConversationAccessibilityTests.dismissKeyboard`).
     ///
     /// `excluding` : vérifications que l'audit ne sait pas mener sur un écran donné. À réserver
     /// aux cas expliqués sur place, avec un test qui contrôle la même chose autrement.

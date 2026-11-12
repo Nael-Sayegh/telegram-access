@@ -6,6 +6,10 @@ import SwiftUI
 ///
 /// Gestes VoiceOver : Magic Tap (double toucher à deux doigts) envoie le brouillon ; Escape
 /// (Z à deux doigts) annule une réponse ou une modification, sinon revient à la liste.
+///
+/// La barre de rédaction est sous la liste, pas superposée : aucun message ne passe derrière
+/// elle ni derrière le clavier, où il serait caché mais toujours à l'écran pour l'audit
+/// d'accessibilité (contraste insuffisant, 2026-11-12).
 struct ConversationView: View {
     @State private var model: ConversationViewModel
     @Environment(\.dismiss) private var dismiss
@@ -16,41 +20,41 @@ struct ConversationView: View {
     }
 
     var body: some View {
-        MessageListView(model: model)
-            .overlay { statusOverlay }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                ComposerBar(model: model)
+        VStack(spacing: 0) {
+            MessageListView(model: model)
+                .overlay { statusOverlay }
+            ComposerBar(model: model)
+        }
+        .accessibilityAction(.magicTap) { model.magicTap() }
+        .accessibilityAction(.escape) {
+            if !model.cancelComposerMode() {
+                dismiss()
             }
-            .accessibilityAction(.magicTap) { model.magicTap() }
-            .accessibilityAction(.escape) {
-                if !model.cancelComposerMode() {
-                    dismiss()
-                }
+        }
+        .navigationTitle(model.title)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                jumpButtons
             }
-            .navigationTitle(model.title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    jumpButtons
-                }
+        }
+        .sheet(item: $model.reactionRequest) { row in
+            ReactionPicker(row: row, model: model)
+        }
+        .sheet(item: $model.forwardRequest) { row in
+            ForwardPicker(targets: model.forwardTargets) { target in
+                model.forward(row, to: target)
             }
-            .sheet(item: $model.reactionRequest) { row in
-                ReactionPicker(row: row, model: model)
-            }
-            .sheet(item: $model.forwardRequest) { row in
-                ForwardPicker(targets: model.forwardTargets) { target in
-                    model.forward(row, to: target)
-                }
-            }
-            .modifier(MessageDeletionAlert(model: model))
-            .modifier(LinkConfirmationAlert(model: model))
-            .onChange(of: model.linkToOpen) { _, url in
-                guard let url else { return }
-                openURL(url)
-                model.linkOpened()
-            }
-            .task { await model.open() }
-            .onDisappear { model.close() }
+        }
+        .modifier(MessageDeletionAlert(model: model))
+        .modifier(LinkConfirmationAlert(model: model))
+        .onChange(of: model.linkToOpen) { _, url in
+            guard let url else { return }
+            openURL(url)
+            model.linkOpened()
+        }
+        .task { await model.open() }
+        .onDisappear { model.close() }
     }
 
     /// Chargement, échec ou conversation vide (la liste est alors vide, rien n'est masqué).
@@ -100,9 +104,8 @@ struct ConversationView: View {
 /// modification, champ multiligne, bouton Envoyer à position fixe, estompé tant que le champ
 /// est vide (VoiceOver : « Envoyer, estompé, bouton »).
 ///
-/// Fond opaque, pas de matériau translucide : les messages qui défilent derrière ne
-/// transparaissent pas sous le texte du bandeau (contraste constant, comme avec « Réduire la
-/// transparence »).
+/// Fond opaque, pas de matériau translucide : contraste constant du texte du bandeau, comme
+/// avec « Réduire la transparence ».
 private struct ComposerBar: View {
     @Bindable var model: ConversationViewModel
     @ScaledMetric(relativeTo: .title2) private var sendIconSize: CGFloat = 32

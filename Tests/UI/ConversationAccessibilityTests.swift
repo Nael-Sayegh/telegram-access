@@ -187,10 +187,23 @@ final class ConversationAccessibilityTests: XCTestCase {
         button.tap()
     }
 
-    /// Ramène le début de la conversation à l'écran. Clavier ouvert, la liste raccourcie laisse
-    /// des messages sous la barre de navigation, qu'iOS 26 estompe : l'audit les juge
-    /// illisibles, souvent sans pouvoir dire lesquels (2026-11-12). Le défilement peut aussi
-    /// fermer le clavier : tout tient alors à l'écran.
+    /// Ferme le clavier comme un utilisateur voyant : glisser de la liste vers le bas, à travers
+    /// le clavier (`scrollDismissesKeyboard(.interactively)`).
+    ///
+    /// Avant un audit : clavier ouvert, la liste raccourcie laisse des messages sous la barre de
+    /// navigation, qu'iOS 26 estompe, et l'audit les juge illisibles sans toujours pouvoir dire
+    /// lesquels (2026-11-12). Clavier fermé, toute la conversation de Marie tient à l'écran.
+    @MainActor
+    private func dismissKeyboard(_ app: XCUIApplication) {
+        let keyboard = app.keyboards.firstMatch
+        guard keyboard.exists else { return }
+        let from = element(app, Self.firstUnread).coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let to = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.98))
+        from.press(forDuration: 0.1, thenDragTo: to)
+        XCTAssertTrue(keyboard.waitForNonExistence(timeout: 5), "Le clavier doit se fermer en glissant à travers lui")
+    }
+
+    /// Ramène le début de la conversation à l'écran, sous la barre de navigation.
     @MainActor
     private func scrollToStart(_ app: XCUIApplication) {
         let start = element(app, Self.firstDay)
@@ -219,7 +232,10 @@ final class ConversationAccessibilityTests: XCTestCase {
         XCTAssertTrue(field.waitForExistence(timeout: 5), "Le champ doit rappeler la réponse")
         let cancel = app.buttons["Annuler la réponse"]
         XCTAssertTrue(cancel.exists)
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5), "Répondre ouvre le clavier")
+        dismissKeyboard(app)
         scrollToStart(app)
+        XCTAssertTrue(field.exists && cancel.exists, "La réponse reste en cours, clavier fermé")
         try AccessibilityAudit.run(app)
 
         cancel.tap()
