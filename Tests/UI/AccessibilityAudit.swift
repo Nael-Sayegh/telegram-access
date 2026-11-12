@@ -12,9 +12,11 @@ enum AccessibilityAudit {
     ///   connu, qui ne touche que les écrans assez longs. Le cas « unsupported » (police fixe)
     ///   reste vérifié ;
     /// - les éléments du clavier système (barre de suggestions), ouvert par Répondre ou
-    ///   Modifier : ils n'appartiennent pas à l'app ;
-    /// - le contraste d'un élément passé sous la barre de navigation : iOS 26 estompe le contenu
-    ///   qui défile dessous. Ramené à l'écran, il est lisible, et contrôlé par les autres audits.
+    ///   Modifier : ils n'appartiennent pas à l'app.
+    ///
+    /// Le contenu qui défile sous la barre de navigation, estompé par iOS 26, échoue au contrôle
+    /// de contraste, souvent sans élément identifié : avant l'audit, le test le ramène à l'écran
+    /// (voir `ConversationAccessibilityTests.scrollToStart`).
     ///
     /// `excluding` : vérifications que l'audit ne sait pas mener sur un écran donné. À réserver
     /// aux cas expliqués sur place, avec un test qui contrôle la même chose autrement.
@@ -25,14 +27,13 @@ enum AccessibilityAudit {
         file: StaticString = #filePath,
         line: UInt = #line
     ) throws {
-        let navigationBar = app.navigationBars.firstMatch
         let keyboard = app.keyboards.firstMatch
         let keyboardFrame = keyboard.exists ? keyboard.frame : .null
         var problems: [String] = []
         try app.performAccessibilityAudit(for: XCUIAccessibilityAuditType.all.subtracting(excluded)) { issue in
             let element = issue.element.map { "« \($0.label) »" } ?? "élément inconnu"
             let description = "\(issue.compactDescription) — \(element) — \(issue.detailedDescription)"
-            if let reason = ignoredReason(issue, navigationBar: navigationBar, keyboardFrame: keyboardFrame) {
+            if let reason = ignoredReason(issue, keyboardFrame: keyboardFrame) {
                 print("Audit ignoré (\(reason)) : \(description)")
                 return true
             }
@@ -54,7 +55,6 @@ enum AccessibilityAudit {
     @MainActor
     private static func ignoredReason(
         _ issue: XCUIAccessibilityAuditIssue,
-        navigationBar: XCUIElement,
         keyboardFrame: CGRect
     ) -> String? {
         if issue.auditType == .dynamicType,
@@ -65,20 +65,8 @@ enum AccessibilityAudit {
         if issue.detailedDescription.contains("TUIPrediction") {
             return "clavier système"
         }
-        guard let element = issue.element, element.exists else { return nil }
-        let frame = element.frame
-        if keyboardFrame.intersects(frame) {
+        if let element = issue.element, element.exists, keyboardFrame.intersects(element.frame) {
             return "clavier système"
-        }
-        // Contenu de la liste qui déborde sous la barre ; les éléments de la barre elle-même
-        // (titre, boutons) restent contrôlés.
-        if issue.auditType == .contrast, navigationBar.exists, frame.minY < navigationBar.frame.maxY {
-            let inBar = navigationBar.descendants(matching: .any)
-                .matching(NSPredicate(format: "label == %@", element.label))
-                .firstMatch
-            if !inBar.exists {
-                return "sous la barre de navigation"
-            }
         }
         return nil
     }

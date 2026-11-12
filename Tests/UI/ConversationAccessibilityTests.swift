@@ -187,6 +187,25 @@ final class ConversationAccessibilityTests: XCTestCase {
         button.tap()
     }
 
+    /// Ramène le début de la conversation à l'écran. Clavier ouvert, la liste raccourcie laisse
+    /// des messages sous la barre de navigation, qu'iOS 26 estompe : l'audit les juge
+    /// illisibles, souvent sans pouvoir dire lesquels (2026-11-12). Le défilement peut aussi
+    /// fermer le clavier : tout tient alors à l'écran.
+    @MainActor
+    private func scrollToStart(_ app: XCUIApplication) {
+        let start = element(app, Self.firstDay)
+        let bar = app.navigationBars.firstMatch
+        func isBelowBar() -> Bool {
+            start.exists && start.frame.minY >= bar.frame.maxY - 1
+        }
+        var swipes = 0
+        while !isBelowBar(), swipes < 4 {
+            element(app, Self.firstUnread).swipeDown()
+            swipes += 1
+        }
+        XCTAssertTrue(isBelowBar(), "Début de la conversation toujours sous la barre de navigation")
+    }
+
     /// Répondre : bandeau au-dessus du champ, champ renommé ; « Annuler la réponse » revient
     /// au champ normal. Écran audité pendant la réponse.
     @MainActor
@@ -200,6 +219,7 @@ final class ConversationAccessibilityTests: XCTestCase {
         XCTAssertTrue(field.waitForExistence(timeout: 5), "Le champ doit rappeler la réponse")
         let cancel = app.buttons["Annuler la réponse"]
         XCTAssertTrue(cancel.exists)
+        scrollToStart(app)
         try AccessibilityAudit.run(app)
 
         cancel.tap()
