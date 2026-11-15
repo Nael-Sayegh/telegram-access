@@ -176,14 +176,24 @@ final class ConversationAccessibilityTests: XCTestCase {
     // MARK: - Actions (menu contextuel, sans VoiceOver ; les mêmes actions sont proposées en
     // actions personnalisées sous VoiceOver)
 
-    /// Appui long sur un message, puis une action du menu.
+    /// Appui long sur un message, puis une action du menu. Les actions dépendent de ce que
+    /// Telegram permet, chargé à l'apparition du message : un menu ouvert avant ne propose que
+    /// « Copier ». Dans ce cas, le menu est refermé et rouvert (échec vu le 2026-11-15).
     @MainActor
     private func chooseInMenu(_ app: XCUIApplication, message: String, action: String) {
         let bubble = element(app, message)
         XCTAssertTrue(bubble.waitForExistence(timeout: 5), "Message « \(message) » absent")
-        bubble.press(forDuration: 1.2)
         let button = app.buttons[action]
-        XCTAssertTrue(button.waitForExistence(timeout: 5), "Action « \(action) » absente du menu")
+        for attempt in 1...3 {
+            bubble.press(forDuration: 1.2)
+            if button.waitForExistence(timeout: 3) { break }
+            guard attempt < 3 else { break }
+            // Toucher en dehors du menu le referme.
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.02)).tap()
+            _ = button.waitForNonExistence(timeout: 2)
+            sleep(1)
+        }
+        XCTAssertTrue(button.exists, "Action « \(action) » absente du menu")
         button.tap()
     }
 
