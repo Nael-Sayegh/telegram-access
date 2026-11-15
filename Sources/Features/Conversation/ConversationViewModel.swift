@@ -110,6 +110,10 @@ final class ConversationViewModel {
     private(set) var scrollToBottomRequest = 0
     /// Dernière annonce faite, pour les tests.
     private(set) var lastAnnouncement: String?
+    /// Messages reçus pendant l'affichage et pas encore vus, du plus ancien au plus récent
+    /// (bouton « 3 nouveaux messages » sous la liste). Un message reçu ne déplace jamais le
+    /// focus : c'est ce bouton, ou le balayage, qui y mène.
+    private(set) var unseenIncomingIds: [Int64] = []
 
     // Actions sur les messages.
     /// Ce que Telegram permet pour chaque message affiché, chargé à son apparition.
@@ -342,6 +346,10 @@ final class ConversationViewModel {
     /// Messages visibles à l'écran : les messages reçus sont signalés vus une fois (lecture).
     func messagesVisible(_ ids: [Int64]) {
         guard isOpen else { return }
+        let visible = Set(ids)
+        if unseenIncomingIds.contains(where: visible.contains) {
+            unseenIncomingIds.removeAll(where: visible.contains)
+        }
         let fresh = ids.filter { id in
             guard let message = state.messages[id], !message.isOutgoing else { return false }
             return viewedIds.insert(id).inserted
@@ -370,6 +378,20 @@ final class ConversationViewModel {
             requestFocus(id, .top)
         } else {
             announce("Aucun message non lu.")
+        }
+    }
+
+    /// Bouton « 3 nouveaux messages » : focus sur le premier message reçu pas encore vu
+    /// (la fin de la conversation est chargée s'il n'est pas dans la fenêtre).
+    func showFirstUnseen() async {
+        guard let first = unseenIncomingIds.first else { return }
+        if state.message(first) == nil {
+            await showLatest(focus: false)
+        }
+        if state.message(first) != nil {
+            requestFocus(first, .top)
+        } else if let newest = state.newestId {
+            requestFocus(newest, .bottom)
         }
     }
 
@@ -737,8 +759,17 @@ final class ConversationViewModel {
             break
         }
         state.apply(event)
-        if case .new = event {
+        switch event {
+        case .new(let message):
+            if !message.isOutgoing, !unseenIncomingIds.contains(message.id) {
+                unseenIncomingIds.append(message.id)
+                unseenIncomingIds.sort()
+            }
             requestMissingReplies()
+        case .deleted(_, let ids):
+            unseenIncomingIds.removeAll(where: ids.contains)
+        default:
+            break
         }
     }
 

@@ -102,6 +102,12 @@ enum ConversationLabels {
     /// Annonce après l'acceptation d'un message par Telegram.
     static let messageSent = "Message envoyé."
 
+    /// Bouton sous la liste quand des messages arrivés n'ont pas encore été vus :
+    /// « 1 nouveau message », « 3 nouveaux messages ».
+    static func newMessages(_ count: Int) -> String {
+        count == 1 ? "1 nouveau message" : "\(count) nouveaux messages"
+    }
+
     /// Raison d'un échec d'envoi, en phrase compréhensible.
     static func sendFailure(_ error: Error) -> String {
         let fallback = "Échec de l'envoi. Vérifiez votre connexion et réessayez."
@@ -219,13 +225,14 @@ enum ConversationLabels {
         }
     }
 
-    /// Extrait sur une ligne, coupé sur un mot au-delà de `replyExcerptLimit` caractères.
-    static func excerpt(_ text: String) -> String {
+    /// Extrait sur une ligne, coupé sur un mot au-delà de `limit` caractères
+    /// (`replyExcerptLimit` par défaut).
+    static func excerpt(_ text: String, limit: Int = replyExcerptLimit) -> String {
         let line = text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
-        guard line.count > replyExcerptLimit else { return line }
-        let prefix = line.prefix(replyExcerptLimit)
+        guard line.count > limit else { return line }
+        let prefix = line.prefix(limit)
         let cut = prefix.lastIndex(of: " ").flatMap { index in
-            prefix.distance(from: prefix.startIndex, to: index) > replyExcerptLimit / 2 ? prefix[..<index] : nil
+            prefix.distance(from: prefix.startIndex, to: index) > limit / 2 ? prefix[..<index] : nil
         } ?? prefix
         return "\(cut)…"
     }

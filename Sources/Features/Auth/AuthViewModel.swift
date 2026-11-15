@@ -28,6 +28,8 @@ final class AuthViewModel {
     /// Changements des messages du client courant, créé et remplacé avec lui (aucun message
     /// perdu entre l'ouverture d'une conversation et le chargement de son historique).
     private(set) var messages: MessageHub?
+    /// Annonce des messages reçus, créée et remplacée avec le client.
+    @ObservationIgnored private var incomingAnnouncer: IncomingAnnouncer?
     /// Service du client courant, pour les opérations sur les conversations et les messages.
     var chatService: (any TelegramService)? { service }
 
@@ -53,8 +55,11 @@ final class AuthViewModel {
         guard service == nil, let config else { return }
         let service = makeService(config)
         self.service = service
-        chats = ChatStore(events: service.chatEvents)
-        messages = MessageHub(events: service.messageEvents)
+        let chats = ChatStore(events: service.chatEvents)
+        let messages = MessageHub(events: service.messageEvents)
+        self.chats = chats
+        self.messages = messages
+        incomingAnnouncer = IncomingAnnouncer(hub: messages, store: chats)
         listenTask = Task { [weak self] in
             await service.start()
             for await step in service.steps {
@@ -81,6 +86,7 @@ final class AuthViewModel {
         service = nil
         chats = nil
         messages = nil
+        incomingAnnouncer = nil
         isRecoveringPassword = false
         step = .starting
         start()

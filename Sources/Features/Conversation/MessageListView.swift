@@ -23,9 +23,36 @@ struct MessageListView: View {
     @Namespace private var rotorNamespace
 
     var body: some View {
-        let items = model.items
         let lastMessageId = model.state.newestId
-        ScrollViewReader { proxy in
+        // Bouton sous la liste, pas superposé : aucun message caché derrière. Lu par VoiceOver
+        // juste avant la barre de rédaction.
+        VStack(spacing: 0) {
+            list(lastMessageId: lastMessageId)
+            if let label = newMessagesLabel(lastMessageId: lastMessageId) {
+                NewMessagesButton(label: label) {
+                    Task { await model.showFirstUnseen() }
+                }
+            }
+        }
+    }
+
+    /// « 3 nouveaux messages » s'il en reste à voir et que la fin n'est pas à l'écran. Sans
+    /// VoiceOver, la liste suit un message arrivé quand on voyait la fin (`follow`) : pas de
+    /// bouton dans ce cas.
+    private func newMessagesLabel(lastMessageId: Int64?) -> String? {
+        let unseen = model.unseenIncomingIds
+        guard let first = unseen.first else { return nil }
+        if let lastMessageId, visibleIds.contains(lastMessageId) { return nil }
+        let ids = model.state.orderedIds
+        if !voiceOverEnabled, let index = ids.firstIndex(of: first), index > 0, visibleIds.contains(ids[index - 1]) {
+            return nil
+        }
+        return ConversationLabels.newMessages(unseen.count)
+    }
+
+    private func list(lastMessageId: Int64?) -> some View {
+        let items = model.items
+        return ScrollViewReader { proxy in
             List(items) { item in
                 row(item)
                     .listRowSeparator(.hidden)
@@ -163,6 +190,34 @@ struct MessageListView: View {
         guard !Task.isCancelled else { return }
         proxy.scrollTo(id, anchor: anchor)
         focusedItem = id
+    }
+}
+
+/// « 3 nouveaux messages » : amène au premier message reçu pas encore vu et y place le focus.
+/// Texte « fond système » sur la couleur d'accent, comme un message envoyé (contraste vérifié
+/// dans les deux modes).
+private struct NewMessagesButton: View {
+    let label: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.down")
+                    .accessibilityHidden(true)
+                Text(label)
+            }
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(Color(uiColor: .systemBackground))
+            .padding(.horizontal, 16)
+            .frame(minHeight: 44)
+            .background(Capsule().fill(Color.accentColor))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .accessibilityHint("Va au premier nouveau message.")
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 6)
     }
 }
 

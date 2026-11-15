@@ -154,4 +154,21 @@ final class ChatListAccessibilityTests: XCTestCase {
         XCTAssertTrue(alert.waitForNonExistence(timeout: 5), "Alerte toujours affichée")
         XCTAssertTrue(app.navigationBars["Discussions"].exists, "La liste doit rester affichée")
     }
+
+    /// Menu Options : sous-menu « Annoncer les messages reçus » et ses trois choix. Le test
+    /// rechoisit la valeur par défaut (le réglage reste enregistré entre deux lancements).
+    @MainActor
+    func testIncomingAnnouncementSetting() throws {
+        let app = launchList()
+        app.navigationBars["Discussions"].buttons["Options"].tap()
+        let setting = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label BEGINSWITH %@", "Annoncer les messages reçus"))
+            .firstMatch
+        XCTAssertTrue(setting.waitForExistence(timeout: 5), "Réglage absent du menu Options")
+        setting.tap()
+        for title in ["Toutes les conversations, sauf en sourdine", "Conversation ouverte", "Jamais"] {
+            XCTAssertTrue(element(app, title).waitForExistence(timeout: 5), "Choix « \(title) » absent")
+        }
+        element(app, "Conversation ouverte").tap()
+    }
 }

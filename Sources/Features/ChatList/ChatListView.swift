@@ -12,6 +12,9 @@ struct ChatListView: View {
     @Bindable var auth: AuthViewModel
     @State private var model: ChatListViewModel
     @State private var confirmsLogout = false
+    /// Lu par `IncomingAnnouncer` à chaque message reçu : le changement vaut tout de suite.
+    @AppStorage(IncomingAnnouncementMode.storageKey)
+    private var announcementMode: IncomingAnnouncementMode = IncomingAnnouncementMode.defaultValue
     @Namespace private var rotorNamespace
     private let service: any TelegramService
     private let hub: MessageHub
@@ -54,6 +57,16 @@ struct ChatListView: View {
             }
             ToolbarItem(placement: .topBarLeading) {
                 Menu {
+                    // Sous-menu : VoiceOver lit le titre et le choix actuel, puis chaque choix,
+                    // celui en cours annoncé « sélectionné ».
+                    Picker(selection: $announcementMode) {
+                        ForEach(IncomingAnnouncementMode.allCases) { mode in
+                            Text(mode.title).tag(mode)
+                        }
+                    } label: {
+                        Text("Annoncer les messages reçus")
+                    }
+                    .pickerStyle(.menu)
                     // Mention « client non officiel » ici plutôt qu'en bas de la liste : en pied
                     // de liste, elle échouait à l'audit de contraste (contenu défilant dessous)
                     // et VoiceOver la lisait après toutes les conversations.

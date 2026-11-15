@@ -233,6 +233,8 @@ telegram-access/                  # dépôt GitHub privé
 
 - 2026-11-12, phase 3, lot 3 : actions sur les messages en actions personnalisées VoiceOver (et menu contextuel sans VoiceOver) selon ce que Telegram permet — répondre (bandeau, champ « Réponse à Paul Martin »), réagir (feuille), copier, transférer (feuille avec recherche), modifier (brouillon mis de côté), épingler, ouvrir un lien (confirmation pour une autre app ; double toucher si lien unique), réessayer l'envoi, supprimer (alerte) ; résultats annoncés ; rotors Messages non lus, Liens, Mentions, Médias ; Magic Tap (envoi) et Escape (annule réponse / modification, sinon retour). Tests unitaires et UI. Barre de rédaction opaque, placée sous la liste : aucun message caché derrière elle ou derrière le clavier. CI verte et essai sur iPhone concluant le 2026-11-13.
 
+- 2026-11-13, phase 3, lot 4 : annonce des messages reçus réglable dans le menu Options (toutes les conversations sauf en sourdine / conversation ouverte, par défaut / jamais), en file d'attente sans couper la parole, rafales regroupées par conversation (« Paul Martin dans Famille : Salut », « 3 nouveaux messages de Marie Dupont ») ; messages déjà lus ou de rattrapage (plus de 2 minutes) ignorés. Dans la conversation, ni focus ni défilement déplacés : bouton « n nouveaux messages » sous la liste, qui place le focus sur le premier. Tests unitaires et test UI du réglage.
+
 **Reste à faire côté compte (manuel)**
 - Rien de bloquant pour TestFlight (secrets `release` en place, envoi fonctionnel).
 - Avant de rendre l'app disponible en France sur l'App Store : déclaration ANSSI, envoi dans App Store Connect, puis `ITSAppUsesNonExemptEncryption = YES` + `ITSEncryptionExportComplianceCode` (voir `docs/CONFIGURATION.md`).
@@ -241,4 +243,4 @@ telegram-access/                  # dépôt GitHub privé
 - Nom affiché définitif (provisoire : « Accessigram », dans `Config/Base.xcconfig`) — doit respecter les conditions de Telegram.
 - Push chiffrées (phase 6) : l'extension de notification doit lire la base TDLib appareil verrouillé, ce qui est incompatible avec `completeUnlessOpen` et la clé `WhenUnlockedThisDeviceOnly` → choisir avant la phase 6 (ex. `completeUntilFirstUserAuthentication` + `AfterFirstUnlockThisDeviceOnly` en App Group, avec migration de la clé).
 
-**Prochaine étape** : phase 3, lot 4 : annonce réglable des messages entrants (toujours / conversation ouverte / jamais), rafales regroupées, sourdine respectée. Puis lots 5 (vocal), 6 (description d'image), 7 (tests UI, finitions, PR vers `main`, TestFlight).
+**Prochaine étape** : CI et essai sur iPhone du lot 4 (trois réglages, rafale dans un groupe, sourdine, bouton « n nouveaux messages »), puis lots 5 (vocal), 6 (description d'image), 7 (tests UI, finitions, PR vers `main`, TestFlight).
