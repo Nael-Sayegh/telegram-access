@@ -24,6 +24,8 @@ protocol ConversationService: AnyObject, Sendable {
     func capabilities(chatId: Int64, messageId: Int64) async throws -> MessageCapabilities
     /// Messages affichés à l'écran (lecture, compteurs de vues).
     func viewMessages(chatId: Int64, ids: [Int64]) async throws
+    /// Contenu ouvert : vocal écouté, message vidéo vu (« écouté » chez l'expéditeur).
+    func openMessageContent(chatId: Int64, messageId: Int64) async throws
 
     /// Envoie un texte, en réponse à `replyTo` s'il est donné, et renvoie l'identifiant
     /// provisoire du message. Le message provisoire arrive aussi par `messageEvents` (`.new`),

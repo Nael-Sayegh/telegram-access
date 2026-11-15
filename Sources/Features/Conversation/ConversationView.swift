@@ -23,6 +23,7 @@ struct ConversationView: View {
         VStack(spacing: 0) {
             MessageListView(model: model)
                 .overlay { statusOverlay }
+            VoicePlayerBar(player: model.voice)
             ComposerBar(model: model)
         }
         .accessibilityAction(.magicTap) { model.magicTap() }

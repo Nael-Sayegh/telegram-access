@@ -137,6 +137,8 @@ final class ConversationViewModel {
     var linkConfirmation: URL?
     /// Lien à ouvrir par la vue (ouverture système), remis à `nil` une fois ouvert.
     private(set) var linkToOpen: URL?
+    /// Lecteur des messages vocaux (un seul à la fois), fermé avec l'écran.
+    let voice = VoicePlayer()
     /// Copie dans le presse-papiers ; remplacée dans les tests.
     @ObservationIgnored var copyHandler: @MainActor (String) -> Void = { UIPasteboard.general.string = $0 }
 
@@ -247,6 +249,7 @@ final class ConversationViewModel {
     func close() {
         guard isOpen else { return }
         isOpen = false
+        voice.stop()
         hub.stopObserving(self)
         if hub.openChatId == chatId {
             hub.openChatId = nil
@@ -446,9 +449,15 @@ final class ConversationViewModel {
         }
     }
 
-    /// Magic Tap (double toucher à deux doigts) : envoie le brouillon s'il y en a un.
-    /// (Lot 5 : lecture / pause du vocal en cours d'abord.)
+    /// Magic Tap (double toucher à deux doigts) : lecture / pause du vocal ouvert dans le
+    /// lecteur, sinon envoi du brouillon s'il y en a un.
     func magicTap() {
+        if let playback = voice.current {
+            if !playback.isLoading {
+                voice.togglePause()
+            }
+            return
+        }
         if canSend {
             send()
         } else {
@@ -468,7 +477,68 @@ final class ConversationViewModel {
 
     /// Actions proposées pour un message (actions personnalisées VoiceOver, menu contextuel).
     func actions(for row: MessageRowModel) -> [MessageAction] {
-        MessageActionLabels.actions(for: row, capabilities: capabilities[row.id], canReact: canReact)
+        let actions = MessageActionLabels.actions(for: row, capabilities: capabilities[row.id], canReact: canReact)
+        guard let voiceAction = voiceAction(for: row) else { return actions }
+        return [voiceAction] + actions
+    }
+
+    /// Vocal : « Écouter », ou « Mettre en pause » / « Reprendre la lecture » s'il est dans le
+    /// lecteur ; `nil` pour un autre message (ou un vocal pas encore envoyé).
+    func voiceAction(for row: MessageRowModel) -> MessageAction? {
+        guard row.mediaKind == .voiceNote, !row.isFailed, !row.isPending else { return nil }
+        guard let playback = voice.current, playback.messageId == row.id else { return .listen }
+        return playback.isPlaying ? .pauseListening : .resumeListening
+    }
+
+    /// Écoute un vocal (téléchargé au besoin), ou met en pause / reprend celui du lecteur.
+    /// Un vocal reçu est signalé écouté à Telegram au début de la première lecture.
+    func toggleVoice(_ row: MessageRowModel) {
+        if voice.current?.messageId == row.id {
+            voice.togglePause()
+            return
+        }
+        guard let message = state.message(row.id), let media = message.body.media, media.kind == .voiceNote else {
+            return
+        }
+        var duration: TimeInterval = 0
+        if case .voiceNote(let seconds, _) = message.body.content {
+            duration = TimeInterval(seconds)
+        }
+        let author = message.isOutgoing ? nil : store.state.authorName(of: message.sender, signature: message.authorSignature)
+        voice.load(
+            messageId: row.id,
+            title: VoiceLabels.title(author: author, isOutgoing: message.isOutgoing),
+            duration: duration
+        )
+        let service = service
+        let chatId = chatId
+        let messageId = row.id
+        let marksListened = !message.isOutgoing && !media.isListened
+        Task {
+            var file = media.file
+            if file.localPath == nil {
+                file = (try? await service.downloadFile(file.id)) ?? file
+            }
+            guard let path = file.localPath else {
+                failVoice(messageId, VoiceLabels.downloadFailure)
+                return
+            }
+            do {
+                try await voice.play(file: URL(fileURLWithPath: path), messageId: messageId)
+            } catch {
+                failVoice(messageId, VoiceLabels.failure)
+                return
+            }
+            if marksListened, voice.current?.messageId == messageId {
+                try? await service.openMessageContent(chatId: chatId, messageId: messageId)
+            }
+        }
+    }
+
+    private func failVoice(_ messageId: Int64, _ text: String) {
+        guard voice.current?.messageId == messageId else { return }
+        voice.stop()
+        announce(text)
     }
 
     /// Vrai pour un message reçu après le dernier lu à l'ouverture (rotor « Messages non lus »).
@@ -482,6 +552,8 @@ final class ConversationViewModel {
         let chatId = chatId
         let messageId = row.id
         switch action {
+        case .listen, .resumeListening, .pauseListening:
+            toggleVoice(row)
         case .reply:
             startReply(to: row)
         case .react:

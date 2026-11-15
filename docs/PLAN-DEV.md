@@ -235,6 +235,8 @@ telegram-access/                  # dépôt GitHub privé
 
 - 2026-11-13, phase 3, lot 4 : annonce des messages reçus réglable dans le menu Options (toutes les conversations sauf en sourdine / conversation ouverte, par défaut / jamais), en file d'attente sans couper la parole, rafales regroupées par conversation (« Paul Martin dans Famille : Salut », « 3 nouveaux messages de Marie Dupont ») ; messages déjà lus ou de rattrapage (plus de 2 minutes) ignorés. Dans la conversation, ni focus ni défilement déplacés : bouton « n nouveaux messages » sous la liste, qui place le focus sur le premier. Tests unitaires et test UI du réglage.
 
+- 2026-11-15, phase 3, lot 5a : lecture des messages vocaux sans dépendance externe — conteneur OGG lu par l'app, Opus décodé par AudioToolbox. Double toucher sur un vocal (ou action « Écouter ») : lecture / pause ; barre de lecture au-dessus du champ (lecture / pause, position réglable de 5 secondes en 5 secondes, vitesse 1, 1,5 ou 2 fois, fermer) ; Magic Tap met en pause / reprend le vocal ; vocal reçu signalé « écouté » à Telegram. Tests sur un vrai vocal d'exemple. Lot 5b (enregistrement) à suivre.
+
 **Reste à faire côté compte (manuel)**
 - Rien de bloquant pour TestFlight (secrets `release` en place, envoi fonctionnel).
 - Avant de rendre l'app disponible en France sur l'App Store : déclaration ANSSI, envoi dans App Store Connect, puis `ITSAppUsesNonExemptEncryption = YES` + `ITSEncryptionExportComplianceCode` (voir `docs/CONFIGURATION.md`).
@@ -243,4 +245,4 @@ telegram-access/                  # dépôt GitHub privé
 - Nom affiché définitif (provisoire : « Accessigram », dans `Config/Base.xcconfig`) — doit respecter les conditions de Telegram.
 - Push chiffrées (phase 6) : l'extension de notification doit lire la base TDLib appareil verrouillé, ce qui est incompatible avec `completeUnlessOpen` et la clé `WhenUnlockedThisDeviceOnly` → choisir avant la phase 6 (ex. `completeUntilFirstUserAuthentication` + `AfterFirstUnlockThisDeviceOnly` en App Group, avec migration de la clé).
 
-**Prochaine étape** : CI et essai sur iPhone du lot 4 (trois réglages, rafale dans un groupe, sourdine, bouton « n nouveaux messages »), puis lots 5 (vocal), 6 (description d'image), 7 (tests UI, finitions, PR vers `main`, TestFlight).
+**Prochaine étape** : CI et essai sur iPhone des lots 4 (trois réglages, rafale dans un groupe, sourdine, bouton « n nouveaux messages ») et 5a (lecture d'un vocal reçu d'un client officiel, vitesse, ±5 s, Magic Tap), puis lot 5b (enregistrement et envoi), 6 (description d'image), 7 (tests UI, finitions, PR vers `main`, TestFlight).

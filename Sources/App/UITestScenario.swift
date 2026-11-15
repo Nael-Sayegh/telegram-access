@@ -172,6 +172,7 @@ actor UITestAuthService: TelegramService {
         )
     }
     func viewMessages(chatId: Int64, ids: [Int64]) {}
+    func openMessageContent(chatId: Int64, messageId: Int64) {}
 
     /// Message provisoire puis envoi réussi, comme TDLib.
     func sendText(_ text: String, chatId: Int64, replyTo: Int64?) -> Int64 {

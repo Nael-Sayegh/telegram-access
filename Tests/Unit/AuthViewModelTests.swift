@@ -230,6 +230,11 @@ actor FakeAuthService: TelegramService {
         messageCalls.append("view \(chatId) \(ids.map { String($0) }.joined(separator: ","))")
     }
 
+    func openMessageContent(chatId: Int64, messageId: Int64) throws {
+        try throwIfNeeded()
+        messageCalls.append("openContent \(chatId) \(messageId)")
+    }
+
     /// Identifiant provisoire du prochain message envoyé.
     private(set) var nextTemporaryId: Int64 = 1000
 

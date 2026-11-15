@@ -2,6 +2,10 @@ import Foundation
 
 /// Action sur un message : action personnalisée VoiceOver et entrée du menu contextuel.
 enum MessageAction: Hashable {
+    /// Vocal : écouter, reprendre ou mettre en pause (en tête des actions).
+    case listen
+    case resumeListening
+    case pauseListening
     case reply
     case react
     case copy
@@ -58,6 +62,9 @@ enum MessageActionLabels {
 
     static func name(_ action: MessageAction) -> String {
         switch action {
+        case .listen: return VoiceLabels.listen
+        case .resumeListening: return VoiceLabels.resume
+        case .pauseListening: return VoiceLabels.pause
         case .reply: return "Répondre"
         case .react: return "Réagir"
         case .copy: return "Copier"

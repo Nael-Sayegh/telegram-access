@@ -116,9 +116,12 @@ struct MessageListView: View {
                         }
                     }
                 }
-                .modifier(SingleLinkActivation(link: message.links.count == 1 ? message.links.first : nil) { url in
-                    model.open(url)
-                })
+                .modifier(MessageActivation(
+                    isVoice: model.voiceAction(for: message) != nil,
+                    link: message.links.count == 1 ? message.links.first : nil,
+                    toggleVoice: { model.toggleVoice(message) },
+                    open: { model.open($0) }
+                ))
                 .modifier(MessageContextMenu(actions: actions, isEnabled: !voiceOverEnabled) { action in
                     model.perform(action, on: message)
                 })
@@ -221,14 +224,24 @@ private struct NewMessagesButton: View {
     }
 }
 
-/// Message contenant un seul lien : l'activation (double toucher, ou toucher sans VoiceOver)
-/// l'ouvre, et VoiceOver annonce « lien ». Avec plusieurs liens, chacun a son action.
-private struct SingleLinkActivation: ViewModifier {
+/// Activation d'un message (double toucher, ou toucher sans VoiceOver) :
+/// - vocal : lecture / pause, sans que VoiceOver parle par-dessus (`startsMediaSession`) ;
+/// - un seul lien : l'ouvre, et VoiceOver annonce « lien ». Avec plusieurs liens, chacun a
+///   son action.
+private struct MessageActivation: ViewModifier {
+    let isVoice: Bool
     let link: URL?
+    let toggleVoice: () -> Void
     let open: (URL) -> Void
 
     func body(content: Content) -> some View {
-        if let link {
+        if isVoice {
+            content
+                .accessibilityAddTraits(.startsMediaSession)
+                .accessibilityHint(VoiceLabels.listenHint)
+                .accessibilityAction { toggleVoice() }
+                .onTapGesture { toggleVoice() }
+        } else if let link {
             content
                 .accessibilityAddTraits(.isLink)
                 .accessibilityAction { open(link) }
@@ -264,6 +277,8 @@ private struct MessageContextMenu: ViewModifier {
 
     private static func icon(_ action: MessageAction) -> String {
         switch action {
+        case .listen, .resumeListening: return "play"
+        case .pauseListening: return "pause"
         case .reply: return "arrowshape.turn.up.left"
         case .react: return "face.smiling"
         case .copy: return "doc.on.doc"

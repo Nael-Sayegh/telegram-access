@@ -50,6 +50,12 @@ extension TelegramClient: ConversationService {
         }
     }
 
+    func openMessageContent(chatId: Int64, messageId: Int64) async throws {
+        _ = try await run {
+            try await $0.openMessageContent(chatId: chatId, messageId: messageId)
+        }
+    }
+
     func sendText(_ text: String, chatId: Int64, replyTo: Int64?) async throws -> Int64 {
         let content = InputMessageContent.inputMessageText(Self.inputText(text, clearDraft: true))
         let reply = replyTo.map { Self.inputReply(to: $0) }
